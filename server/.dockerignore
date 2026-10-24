@@ -1,0 +1,32 @@
+# Ignore dependencies (reinstalled cleanly inside the build stage)
+node_modules
+npm-debug.log*
+
+# Ignore all real environment files (secrets must never be baked into images)
+.env
+.env.*
+*.env
+!.env.example
+
+# Ignore tests, mocks, and test artifacts
+test/
+tests/
+coverage/
+.nyc_output/
+
+# Ignore local logs and temporary files
+logs/
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Ignore git metadata
+.git
+.gitignore
+
+# Ignore local IDE and OS artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

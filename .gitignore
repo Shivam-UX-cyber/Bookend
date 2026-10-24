@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment Variables (strictly ignore all live envs, preserve examples)
+.env
+.env.*
+*.env
+!.env.example
+!*/.env.example
+
+# Build outputs & Coverage
+dist/
+client/dist/
+build/
+coverage/
+.nyc_output/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS Files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,214 @@
+/* ==========================================================================
+   Campus Book Exchange — Design System & Styles
+   Aesthetic: Deep Oceanic Glassmorphism & Modern Academic Precision
+   ========================================================================== */
+
+:root {
+  /* Color Tokens — Pure Minimalist Obsidian & Monochrome (Vercel Style) */
+  --bg-deep: #09090b;
+  --bg-surface: #121215;
+  --bg-card: rgba(18, 18, 22, 0.78);
+  --bg-card-hover: rgba(28, 28, 34, 0.92);
+  --bg-input: rgba(15, 15, 18, 0.85);
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(255, 255, 255, 0.32);
+  --border-glow: rgba(255, 255, 255, 0.2);
+  --border-chrome: rgba(255, 255, 255, 0.16);
+
+  --primary: #ffffff;
+  --primary-hover: #e4e4e7;
+  --primary-gradient: linear-gradient(180deg, #ffffff 0%, #e4e4e7 100%);
+  --primary-glow: 0 0 24px rgba(255, 255, 255, 0.25);
+
+  --accent-crystal: #38bdf8;
+  --accent-cyan: #38bdf8;
+  --accent-sky: #7dd3fc;
+  --accent-emerald: #10b981;
+  --accent-mint: #34d399;
+  --accent-amber: #fbbf24;
+  --accent-purple: #a855f7;
+  --accent-rose: #f43f5e;
+
+  /* Curated Vercel Monochrome & Chrome Gradients */
+  --gradient-card: linear-gradient(180deg, rgba(22, 22, 26, 0.95) 0%, rgba(13, 13, 16, 0.98) 100%);
+  --gradient-card-hover: linear-gradient(180deg, rgba(30, 30, 36, 0.96) 0%, rgba(18, 18, 22, 0.99) 100%);
+  --gradient-card-elevated: linear-gradient(180deg, rgba(34, 34, 42, 0.6) 0%, rgba(14, 14, 18, 0.98) 100%);
+  --gradient-hero: radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.09) 0%, transparent 60%), linear-gradient(180deg, rgba(20, 20, 24, 0.95) 0%, rgba(9, 9, 11, 0.99) 100%);
+  --gradient-hero-market: radial-gradient(ellipse at 50% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 55%), radial-gradient(circle at 85% 20%, rgba(255, 255, 255, 0.05) 0%, transparent 45%), linear-gradient(180deg, rgba(20, 20, 25, 0.96) 0%, rgba(9, 9, 11, 0.99) 100%);
+  --gradient-hero-dashboard: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.07) 0%, transparent 55%), radial-gradient(circle at 15% 85%, rgba(56, 189, 248, 0.06) 0%, transparent 45%), linear-gradient(180deg, rgba(20, 20, 25, 0.96) 0%, rgba(9, 9, 11, 0.99) 100%);
+  --gradient-hero-requests: radial-gradient(ellipse at 50% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 55%), linear-gradient(180deg, rgba(18, 18, 23, 0.96) 0%, rgba(9, 9, 11, 0.99) 100%);
+  --gradient-hero-profile: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.07) 0%, transparent 55%), linear-gradient(180deg, rgba(20, 20, 25, 0.96) 0%, rgba(9, 9, 11, 0.99) 100%);
+  --gradient-prismatic: linear-gradient(180deg, #ffffff 0%, #d4d4d8 50%, #a1a1aa 100%);
+  --gradient-chrome-trim: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12) 15%, rgba(255, 255, 255, 0.5) 50%, rgba(255, 255, 255, 0.12) 85%, transparent);
+  --gradient-gold-trim: var(--gradient-chrome-trim);
+  --gradient-cyan-trim: var(--gradient-chrome-trim);
+  --gradient-emerald-trim: var(--gradient-chrome-trim);
+  --gradient-pill: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+  --gradient-pill-active: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.08) 100%);
+  --gradient-glow-white: 0 0 24px rgba(255, 255, 255, 0.2);
+  --gradient-glow-crystal: 0 0 24px rgba(56, 189, 248, 0.25);
+
+  /* Minimalist Physical Book Colors & Lighting */
+  --book-leather: #141418;
+  --book-paper-ivory: #faf8f5;
+  --book-paper-cream: #f4f0e6;
+  --book-gold-trim: linear-gradient(135deg, #ffffff 0%, #d4d4d8 50%, #71717a 100%);
+  --book-ribbon-crimson: linear-gradient(180deg, #ffffff 0%, #a1a1aa 50%, #3f3f46 100%);
+  --book-shadow-standing: -14px 18px 32px rgba(0, 0, 0, 0.85), 0 4px 12px rgba(0, 0, 0, 0.7);
+
+  --success: #10b981;
+  --success-bg: rgba(16, 185, 129, 0.12);
+  --success-border: rgba(16, 185, 129, 0.3);
+
+  --warning: #fbbf24;
+  --warning-bg: rgba(251, 191, 36, 0.12);
+  --warning-border: rgba(251, 191, 36, 0.3);
+
+  --danger: #f43f5e;
+  --danger-bg: rgba(244, 63, 94, 0.12);
+  --danger-border: rgba(244, 63, 94, 0.3);
+
+  --text-main: #fafafa;
+  --text-primary: var(--text-main);
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --surface: var(--bg-surface);
+  --border: var(--border-subtle);
+
+  /* Typography */
+  --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Elevation & Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  --shadow-card: 0 20px 40px -15px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-card-hover: 0 24px 50px -12px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 24px rgba(255, 255, 255, 0.06);
+  --shadow-input-focus: 0 0 0 2px rgba(255, 255, 255, 0.3), 0 0 16px rgba(255, 255, 255, 0.08);
+  --shadow-btn: 0 4px 18px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(255, 255, 255, 0.15);
+
+  /* Motion & Transitions */
+  --ease-out-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 0.15s var(--ease-out-smooth);
+  --transition-normal: 0.25s var(--ease-out-smooth);
+  --transition-slow: 0.4s var(--ease-out-smooth);
+
+  /* Component Sizing */
+  --height-input: 46px;
+  --height-btn: 44px;
+}
+
+/* Base Reset & Box Sizing */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Accessible Keyboard Focus Rings (WCAG 2.2 AA) */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+html, body {
+  min-height: 100vh;
+  background-color: var(--bg-deep);
+  color: var(--text-main);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Minimalist Vercel Monochromatic Ambient Spotlights */
+body::before {
+  content: '';
+  position: fixed;
+  top: -15%;
+  left: 20%;
+  width: 60vw;
+  height: 60vw;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.045) 0%, transparent 65%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(100px);
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -20%;
+  right: -10%;
+  width: 55vw;
+  height: 55vw;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.035) 0%, transparent 65%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(100px);
+}
+
+.app-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==========================================================================
+   Core Utility Classes (Guarantees layout fidelity across all pages)
+   ========================================================================== */
+.flex { display: flex; }
+.inline-flex { display: inline-flex; }
+.flex-col { flex-direction: column; }
+.flex-row { flex-direction: row; }
+.flex-wrap { flex-wrap: wrap; }
+.flex-1 { flex: 1 1 0%; }
+.items-center { align-items: center; }
+.items-start { align-items: flex-start; }
+.items-end { align-items: flex-end; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.justify-start { justify-content: flex-start; }
+.justify-end { justify-content: flex-end; }
+.gap-1 { gap: 4px; }
+.gap-1\.5 { gap: 6px; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+.gap-6 { gap: 24px; }
+.mt-1 { margin-top: 4px; }
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+.mt-4 { margin-top: 16px; }
+.mt-6 { margin-top: 24px; }
+.mb-2 { margin-bottom: 8px; }
+.mb-3 { margin-bottom: 12px; }
+.mb-4 { margin-bottom: 16px; }
+.mb-6 { margin-bottom: 24px; }
+.pt-3 { padding-top: 12px; }
+.pt-4 { padding-top: 16px; }
+.border-t { border-top-width: 1px; border-top-style: solid; }
+.border-border { border-color: var(--border-subtle); }
+.font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.text-success { color: var(--success); }
+.opacity-90 { opacity: 0.9; }
+.opacity-60 { opacity: 0.6; }
+.cursor-not-allowed { cursor: not-allowed; }

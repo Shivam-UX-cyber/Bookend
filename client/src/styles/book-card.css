@@ -1,0 +1,1460 @@
+/* ==========================================================================
+   Campus Book Exchange — Book Card & Grid Styles (Clean, Modern, Stateful)
+   ========================================================================== */
+
+/* Books Grid - Generous, wide 3D hardcover presentation */
+.books-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 28px;
+}
+
+/* Book Card */
+.book-card {
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(22, 22, 26, 0.95) 0%, rgba(13, 13, 16, 0.98) 100%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease, box-shadow 0.3s ease;
+  backdrop-filter: blur(16px);
+  position: relative;
+}
+
+.book-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 22px 46px -10px rgba(0, 0, 0, 0.9), 0 0 20px rgba(255, 255, 255, 0.06);
+}
+
+.book-card-sold {
+  opacity: 0.72;
+}
+
+.book-card-sold:hover {
+  border-color: var(--border-subtle);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+}
+
+/* Realistic 3D Physical Book Card Presentation Alcove */
+.book-card-media.book-3d-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 11;
+  background: 
+    radial-gradient(ellipse at 50% 10%, rgba(255, 255, 255, 0.04) 0%, transparent 65%),
+    radial-gradient(circle at 50% 25%, #151518 0%, #09090b 100%);
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: calc(var(--radius-xl) - 1px) calc(var(--radius-xl) - 1px) 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1200px;
+  padding: 16px 14px 18px 18px;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Ambient Library Stand Ground Shadow */
+.book-3d-ground-shadow {
+  position: absolute;
+  bottom: 8px;
+  left: 24px;
+  right: 20px;
+  height: 14px;
+  background: radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0.85) 0%, transparent 80%);
+  filter: blur(5px);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.book-card:hover .book-3d-ground-shadow {
+  transform: scaleX(1.12) translateY(3px);
+  opacity: 0.95;
+  filter: blur(7px);
+}
+
+.book-3d-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: perspective(1000px) rotateY(-5deg) rotateX(2deg);
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 2;
+}
+
+.book-card:hover .book-3d-container {
+  transform: perspective(1000px) rotateY(-10deg) rotateX(4deg) translateY(-8px) scale(1.02);
+}
+
+/* ==========================================================================
+   Real Hardcover Bookbinding Themes (Obsidian Monochrome & Metallic Silver)
+   ========================================================================== */
+
+/* 1. Deep Obsidian Leather Tome */
+.binding-obsidian .book-3d-spine,
+.binding-oxblood .book-3d-spine {
+  background: linear-gradient(90deg, #09090b 0%, #18181b 30%, #27272a 55%, #18181b 85%, #09090b 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
+}
+.binding-obsidian .book-hardcover-embossed,
+.binding-oxblood .book-hardcover-embossed {
+  background: 
+    radial-gradient(circle at 50% 25%, rgba(255, 255, 255, 0.06) 0%, transparent 65%),
+    linear-gradient(145deg, #18181b 0%, #121215 50%, #09090b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* 2. Royal Midnight Charcoal Morocco Leather */
+.binding-charcoal .book-3d-spine,
+.binding-navy .book-3d-spine {
+  background: linear-gradient(90deg, #0b0c10 0%, #1a1b23 30%, #2b2c38 55%, #1a1b23 85%, #0b0c10 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
+}
+.binding-charcoal .book-hardcover-embossed,
+.binding-navy .book-hardcover-embossed {
+  background: 
+    radial-gradient(circle at 50% 25%, rgba(56, 189, 248, 0.08) 0%, transparent 65%),
+    linear-gradient(145deg, #1c1d26 0%, #13141b 50%, #0b0c10 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* 3. Academic Dark Slate Buckram */
+.binding-slate .book-3d-spine,
+.binding-emerald .book-3d-spine {
+  background: linear-gradient(90deg, #090d0b 0%, #141f1a 30%, #20332b 55%, #141f1a 85%, #090d0b 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
+}
+.binding-slate .book-hardcover-embossed,
+.binding-emerald .book-hardcover-embossed {
+  background: 
+    radial-gradient(circle at 50% 25%, rgba(52, 211, 153, 0.08) 0%, transparent 65%),
+    linear-gradient(145deg, #17221d 0%, #0f1713 50%, #090d0b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* 4. Midnight Onyx & Platinum Leather */
+.binding-onyx .book-3d-spine,
+.binding-chestnut .book-3d-spine,
+.binding-plum .book-3d-spine {
+  background: linear-gradient(90deg, #070709 0%, #141419 30%, #23232c 55%, #141419 85%, #070709 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
+}
+.binding-onyx .book-hardcover-embossed,
+.binding-chestnut .book-hardcover-embossed,
+.binding-plum .book-hardcover-embossed {
+  background: 
+    radial-gradient(circle at 50% 25%, rgba(255, 255, 255, 0.07) 0%, transparent 65%),
+    linear-gradient(145deg, #181820 0%, #101015 50%, #070709 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* 3D Spine on Left Edge with Raised Bands & Woven Headband */
+.book-3d-spine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 18px;
+  z-index: 8;
+  border-radius: 4px 0 0 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0;
+  box-shadow: 
+    inset 2px 0 5px rgba(255, 255, 255, 0.2),
+    inset -3px 0 6px rgba(0, 0, 0, 0.8),
+    4px 0 10px rgba(0, 0, 0, 0.7);
+}
+
+/* Woven Headband and Tailband at edges of spine */
+.spine-headband,
+.spine-tailband {
+  width: 100%;
+  height: 4px;
+  background: repeating-linear-gradient(
+    90deg,
+    #27272a 0px,
+    #27272a 2px,
+    #e4e4e7 2px,
+    #e4e4e7 4px
+  );
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.7);
+}
+
+.spine-headband {
+  border-radius: 4px 0 0 0;
+}
+
+.spine-tailband {
+  border-radius: 0 0 0 4px;
+}
+
+.spine-ribs-group {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  flex: 1;
+  padding: 16px 0;
+}
+
+/* Raised Bands (Chrome Embossed Ribs) */
+.spine-rib {
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    #18181b 0%,
+    #f4f4f5 40%,
+    #a1a1aa 75%,
+    #18181b 100%
+  );
+  box-shadow: 
+    0 2px 3px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* Layered Deckle Paper Page Edges (Right Side) */
+.book-3d-pages-edge {
+  position: absolute;
+  right: 2px;
+  top: 5px;
+  bottom: 5px;
+  width: 13px;
+  background: repeating-linear-gradient(
+    to bottom,
+    #f5f5f7 0px,
+    #e4e4e7 1.5px,
+    #d4d4d8 2.5px,
+    #a1a1aa 3.5px
+  );
+  border-radius: 0 4px 4px 0;
+  box-shadow: 
+    inset -3px 0 6px rgba(0, 0, 0, 0.5),
+    inset 2px 0 4px rgba(255, 255, 255, 0.2),
+    3px 0 6px rgba(0, 0, 0, 0.4);
+  z-index: 3;
+}
+
+/* Layered Paper Edge (Bottom Edge) */
+.book-3d-pages-bottom {
+  position: absolute;
+  bottom: 2px;
+  left: 18px;
+  right: 12px;
+  height: 7px;
+  background: repeating-linear-gradient(
+    to right,
+    #f5f5f7 0px,
+    #d4d4d8 2px,
+    #a1a1aa 3.5px
+  );
+  box-shadow: 
+    inset 0 -3px 5px rgba(0, 0, 0, 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.35);
+  z-index: 3;
+}
+
+/* Silk Silver Bookmark Ribbon */
+.book-3d-ribbon {
+  position: absolute;
+  bottom: -13px;
+  left: 44px;
+  width: 12px;
+  height: 22px;
+  background: linear-gradient(180deg, #f4f4f5 0%, #d4d4d8 50%, #71717a 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%);
+  z-index: 9;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.65);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.book-3d-ribbon::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 45%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.book-card:hover .book-3d-ribbon {
+  transform: translateY(4px) rotate(-6deg);
+}
+
+/* Front Hardcover — Real Hardcover Physical Presence */
+.book-3d-cover {
+  position: absolute;
+  inset: 0;
+  transform-origin: 18px center;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.45s ease;
+  z-index: 5;
+  overflow: hidden;
+  border-radius: 0 6px 6px 0;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.book-card:hover .book-3d-cover {
+  box-shadow: 12px 0 28px -4px rgba(0, 0, 0, 0.7);
+}
+
+/* Stamped Chrome Foil Double Border & Corner Filigree */
+.book-cover-foil-frame {
+  position: absolute;
+  inset: 8px 8px 8px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  outline: 1px solid rgba(255, 255, 255, 0.12);
+  outline-offset: -4px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.corner-filigree {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: #f4f4f5;
+}
+
+.corner-tl { top: -2px; left: -2px; border-top: 2px solid; border-left: 2px solid; }
+.corner-tr { top: -2px; right: -2px; border-top: 2px solid; border-right: 2px solid; }
+.corner-bl { bottom: -2px; left: -2px; border-bottom: 2px solid; border-left: 2px solid; }
+.corner-br { bottom: -2px; right: -2px; border-bottom: 2px solid; border-right: 2px solid; }
+
+/* Embossed Hardcover Tome Body */
+.book-hardcover-embossed {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 18px 16px 14px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  text-align: center;
+  box-shadow: inset 0 0 35px rgba(0, 0, 0, 0.7);
+  border-radius: 0 6px 6px 0;
+  overflow: hidden;
+}
+
+.leather-texture-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    radial-gradient(rgba(0, 0, 0, 0.4) 1px, transparent 1px);
+  background-size: 4px 4px, 6px 6px;
+  background-position: 0 0, 2px 2px;
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+.hardcover-header-foil {
+  position: relative;
+  z-index: 2;
+  margin-top: 1px;
+}
+
+.hardcover-category-badge {
+  font-size: 0.60rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.hardcover-center-seal {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0 4px;
+}
+
+.hardcover-insignia {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.16) 0%, rgba(0, 0, 0, 0.6) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.15);
+}
+
+.hardcover-crest-icon {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9));
+}
+
+.hardcover-title-gilt {
+  font-family: var(--font-heading, Inter, sans-serif);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  text-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.95),
+    0 0 12px rgba(255, 255, 255, 0.2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+}
+
+.hardcover-gilt-divider {
+  width: 44px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.75) 50%, transparent 100%);
+  margin: 1px 0;
+}
+
+.hardcover-author-gilt {
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: #d4d4d8;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90%;
+  margin: 0;
+}
+
+.hardcover-footer-imprint {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 1px;
+}
+
+.hardcover-imprint-text {
+  font-size: 0.54rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Hover Quick Zoom Lens Overlay */
+.book-3d-hover-lens {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 50%, rgba(9, 9, 11, 0.35) 0%, rgba(9, 9, 11, 0.65) 100%);
+  opacity: 0;
+  backdrop-filter: blur(2px);
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 8;
+  pointer-events: none;
+}
+
+.book-card:hover .book-3d-hover-lens {
+  opacity: 1;
+}
+
+.hover-lens-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  color: #09090b;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), 0 0 14px rgba(255, 255, 255, 0.4);
+  transform: translateY(6px) scale(0.92);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.book-card:hover .hover-lens-pill {
+  transform: translateY(0) scale(1);
+}
+
+/* When Book HAS an image: Inlaid Art Plate on Hardcover */
+.book-cover-plate-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000000;
+  overflow: hidden;
+}
+
+.book-plate-bevel {
+  position: absolute;
+  inset: 0;
+  box-shadow: 
+    inset 0 0 16px rgba(0, 0, 0, 0.7),
+    inset 1px 0 0 rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+}
+
+/* Luminous Sheen Highlight passing across cover */
+.book-cover-sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    transparent 30%,
+    rgba(255, 255, 255, 0.12) 45%,
+    rgba(255, 255, 255, 0.24) 50%,
+    rgba(255, 255, 255, 0.06) 55%,
+    transparent 70%,
+    transparent 100%
+  );
+  opacity: 0;
+  transform: translateX(-100%);
+  transition: transform 0.65s ease, opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.book-card:hover .book-cover-sheen {
+  opacity: 1;
+  transform: translateX(100%);
+}
+
+.book-cover-hinge {
+  position: absolute;
+  left: 18px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.65) 0%, rgba(255, 255, 255, 0.16) 50%, rgba(0, 0, 0, 0.5) 100%);
+  pointer-events: none;
+  z-index: 6;
+}
+
+.book-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Badges Placement */
+.book-card-top-left-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+}
+
+.book-card-top-right-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+}
+
+.book-card-floating-badges {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+
+/* Condition Badges */
+.badge-condition {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(8px);
+}
+
+.badge-condition-new {
+  background: rgba(16, 185, 129, 0.22);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+}
+
+.badge-condition-like-new {
+  background: rgba(6, 182, 212, 0.22);
+  color: #22d3ee;
+  border: 1px solid rgba(6, 182, 212, 0.45);
+}
+
+.badge-condition-good {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+}
+
+.badge-condition-acceptable {
+  background: rgba(168, 85, 247, 0.22);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.45);
+}
+
+.badge-condition-default {
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.badge-status-sold {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(15, 23, 42, 0.9);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.badge-status-reserved {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+/* Book Card Body */
+.book-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.book-card-meta {
+  margin-bottom: 5px;
+}
+
+.book-card-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.book-card-title {
+  font-family: var(--font-heading);
+  font-size: 1.04rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0 0 4px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.7em;
+}
+
+.book-card-title-link,
+.book-card-title-btn {
+  color: var(--text-main);
+  text-decoration: none;
+  transition: color 0.15s ease;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: inline;
+}
+
+.book-card-title-link:hover,
+.book-card-title-btn:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+.book-card-author {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 0 0 12px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.author-name {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.book-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+  margin-bottom: 12px;
+}
+
+.book-card-price-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.price-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.price-value {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #34d399;
+}
+
+.book-card-seller {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  max-width: 140px;
+}
+
+.book-card-seller-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.seller-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+}
+
+/* Owner indicator in footer */
+.book-card-owner-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.owner-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.6);
+}
+
+/* Card Actions - Fixed 38px Single Row Height across all cards */
+.book-card-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  height: 38px;
+  width: 100%;
+  position: relative;
+  z-index: 20;
+}
+
+.book-card-actions:not(.is-owner) .btn-card-details {
+  flex: 1;
+}
+
+.btn-card-details {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  width: 100% !important;
+  padding: 0 16px !important;
+  background: #ffffff !important;
+  border: 1px solid #ffffff !important;
+  color: #09090b !important;
+  border-radius: var(--radius-md) !important;
+  font-size: 0.88rem !important;
+  font-weight: 700 !important;
+  text-decoration: none !important;
+  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.25), 0 4px 12px rgba(0, 0, 0, 0.6) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  cursor: pointer !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.btn-card-details:hover {
+  background: #f4f4f5 !important;
+  color: #09090b !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 4px 18px rgba(255, 255, 255, 0.4), 0 6px 16px rgba(0, 0, 0, 0.7) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Owner Row: Perfectly balanced across 4 actions */
+.book-card-actions.is-owner {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  height: 38px;
+}
+
+.book-card-actions.is-owner .btn-card-details-compact {
+  flex: 1;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  padding: 0 8px !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  border-radius: var(--radius-sm) !important;
+  background: #ffffff !important;
+  border: 1px solid #ffffff !important;
+  color: #09090b !important;
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.book-card-actions.is-owner .btn-card-details-compact:hover {
+  background: #f4f4f5 !important;
+  color: #09090b !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.4) !important;
+  transform: translateY(-1px) !important;
+}
+
+.btn-card-owner-edit {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  padding: 0 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.btn-card-owner-edit:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  border-color: var(--border-active);
+}
+
+.btn-card-owner-status {
+  flex: 1.15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.btn-card-owner-status.mark-sold {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.btn-card-owner-status.mark-sold:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.btn-card-owner-status.relist {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.btn-card-owner-status.relist:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.55);
+}
+
+.btn-card-owner-delete {
+  flex-shrink: 0;
+  width: 36px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  color: #f87171;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-card-owner-delete:hover:not(:disabled) {
+  background: rgba(244, 63, 94, 0.22);
+  color: #fca5a5;
+  border-color: rgba(244, 63, 94, 0.45);
+}
+
+/* Skeletons */
+.book-card-skeleton {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  height: 360px;
+  display: flex;
+  flex-direction: column;
+}
+
+.skeleton-media {
+  width: 100%;
+  aspect-ratio: 16 / 11;
+  background: linear-gradient(90deg, rgba(30, 41, 59, 0.5) 25%, rgba(51, 65, 85, 0.5) 50%, rgba(30, 41, 59, 0.5) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.skeleton-line {
+  background: rgba(51, 65, 85, 0.45);
+  border-radius: 4px;
+}
+
+.skeleton-meta {
+  width: 35%;
+  height: 12px;
+}
+
+.skeleton-title {
+  width: 85%;
+  height: 18px;
+}
+
+.skeleton-desc {
+  width: 100%;
+  height: 28px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ==========================================================================
+   Full 3D Hardcover Book Card Architecture (100% Physical Book Presence)
+   ========================================================================== */
+
+/* The entire card is a standalone physical 3D Hardcover Book */
+.book-card.full-tome-book {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  perspective: 1200px;
+  padding: 8px 10px 20px 12px;
+  cursor: pointer;
+  user-select: none;
+  min-height: 500px;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Ambient Shelf Ground Shadow Beneath Entire Tome */
+.full-tome-ground-shadow {
+  position: absolute;
+  bottom: 6px;
+  left: 26px;
+  right: 18px;
+  height: 18px;
+  background: radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0.92) 0%, transparent 80%);
+  filter: blur(6px);
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.45s ease, filter 0.45s ease;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.book-card.full-tome-book:hover .full-tome-ground-shadow {
+  transform: scaleX(1.14) translateY(6px);
+  opacity: 0.98;
+  filter: blur(9px);
+}
+
+/* 3D Wrapper that holds spine, cover, pages, and ribbon in 3D coordinate space */
+.full-tome-3d-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 485px;
+  transform-style: preserve-3d;
+  transform: perspective(1000px) rotateY(-5deg) rotateX(2deg);
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+}
+
+.book-card.full-tome-book:hover .full-tome-3d-wrapper {
+  transform: perspective(1000px) rotateY(-11deg) rotateX(4deg) translateY(-8px) scale(1.02);
+}
+
+/* Full-Height 3D Leather Spine on Left Edge */
+.full-tome-spine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 21px;
+  z-index: 8;
+  border-radius: 4px 0 0 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0;
+  box-shadow: 
+    inset 2px 0 5px rgba(255, 255, 255, 0.22),
+    inset -3px 0 6px rgba(0, 0, 0, 0.85),
+    4px 0 12px rgba(0, 0, 0, 0.75);
+}
+
+/* Binding Themes for the Full-Height Spine */
+.binding-obsidian .full-tome-spine {
+  background: linear-gradient(90deg, #09090b 0%, #18181b 30%, #27272a 55%, #18181b 85%, #09090b 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.binding-charcoal .full-tome-spine {
+  background: linear-gradient(90deg, #0b0c10 0%, #1a1b23 30%, #2b2c38 55%, #1a1b23 85%, #0b0c10 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.binding-slate .full-tome-spine {
+  background: linear-gradient(90deg, #090d0b 0%, #141f1a 30%, #20332b 55%, #141f1a 85%, #090d0b 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.binding-onyx .full-tome-spine {
+  background: linear-gradient(90deg, #070709 0%, #141419 30%, #23232c 55%, #141419 85%, #070709 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Full-Height Paper Fore-Edge on Right */
+.full-tome-pages-edge {
+  position: absolute;
+  right: 2px;
+  top: 6px;
+  bottom: 6px;
+  width: 14px;
+  background: repeating-linear-gradient(
+    to bottom,
+    #f5f5f7 0px,
+    #e4e4e7 1.5px,
+    #d4d4d8 2.5px,
+    #a1a1aa 3.5px
+  );
+  border-radius: 0 4px 4px 0;
+  box-shadow: 
+    inset -3px 0 6px rgba(0, 0, 0, 0.5),
+    inset 2px 0 4px rgba(255, 255, 255, 0.2),
+    3px 0 8px rgba(0, 0, 0, 0.45);
+  z-index: 3;
+}
+
+/* Layered Paper Edge on Bottom */
+.full-tome-pages-bottom {
+  position: absolute;
+  bottom: 2px;
+  left: 21px;
+  right: 13px;
+  height: 8px;
+  background: repeating-linear-gradient(
+    to right,
+    #f5f5f7 0px,
+    #d4d4d8 2px,
+    #a1a1aa 3.5px
+  );
+  box-shadow: 
+    inset 0 -3px 5px rgba(0, 0, 0, 0.5),
+    0 3px 6px rgba(0, 0, 0, 0.4);
+  z-index: 3;
+}
+
+/* Silk Satin Bookmark Ribbon */
+.full-tome-ribbon {
+  position: absolute;
+  bottom: -13px;
+  left: 48px;
+  width: 13px;
+  height: 24px;
+  background: linear-gradient(180deg, #f4f4f5 0%, #d4d4d8 50%, #71717a 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%);
+  z-index: 9;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.full-tome-ribbon::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 45%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.book-card.full-tome-book:hover .full-tome-ribbon {
+  transform: translateY(4px) rotate(-6deg);
+}
+
+/* Complete Front Hardcover Face */
+.full-tome-cover {
+  position: relative;
+  width: calc(100% - 22px);
+  min-height: 480px;
+  margin-left: 20px;
+  border-radius: 0 6px 6px 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-left: none;
+  box-shadow: 
+    2px 0 14px rgba(0, 0, 0, 0.6),
+    inset 0 0 35px rgba(0, 0, 0, 0.75);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  z-index: 5;
+  transition: box-shadow 0.45s ease;
+}
+
+.book-card.full-tome-book:hover .full-tome-cover {
+  box-shadow: 
+    14px 0 30px -4px rgba(0, 0, 0, 0.75),
+    inset 0 0 40px rgba(0, 0, 0, 0.85);
+}
+
+/* Cover Binding Backgrounds */
+.binding-obsidian .full-tome-cover {
+  background: 
+    radial-gradient(circle at 60% 15%, rgba(255, 255, 255, 0.05) 0%, transparent 60%),
+    linear-gradient(160deg, #18181b 0%, #111114 45%, #09090b 100%);
+}
+
+.binding-charcoal .full-tome-cover {
+  background: 
+    radial-gradient(circle at 60% 15%, rgba(56, 189, 248, 0.06) 0%, transparent 60%),
+    linear-gradient(160deg, #1c1d26 0%, #121319 45%, #0b0c10 100%);
+}
+
+.binding-slate .full-tome-cover {
+  background: 
+    radial-gradient(circle at 60% 15%, rgba(52, 211, 153, 0.06) 0%, transparent 60%),
+    linear-gradient(160deg, #17221d 0%, #0e1512 45%, #090d0b 100%);
+}
+
+.binding-onyx .full-tome-cover {
+  background: 
+    radial-gradient(circle at 60% 15%, rgba(255, 255, 255, 0.06) 0%, transparent 60%),
+    linear-gradient(160deg, #181820 0%, #0f0f14 45%, #070709 100%);
+}
+
+/* Floating Badges Strip on Top */
+.full-tome-top-badges {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.full-tome-top-badges .badge-condition,
+.full-tome-top-badges .badge-status-sold,
+.full-tome-top-badges .badge-status-reserved {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+}
+
+/* Artwork Section (Upper Half of Hardcover) */
+.full-tome-artwork-section {
+  position: relative;
+  width: 100%;
+  height: 210px;
+  background: #000000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+}
+
+.full-tome-art-plate {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.full-tome-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.book-card.full-tome-book:hover .full-tome-img {
+  transform: scale(1.05);
+}
+
+.full-tome-art-bevel {
+  position: absolute;
+  inset: 0;
+  box-shadow: 
+    inset 0 0 18px rgba(0, 0, 0, 0.75),
+    inset 0 -18px 24px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+}
+
+/* Embossed Seal Fallback when no image */
+.full-tome-embossed-crest {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-shadow: inset 0 0 35px rgba(0, 0, 0, 0.7);
+}
+
+.full-tome-crest-label {
+  font-size: 0.60rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #a1a1aa;
+}
+
+/* Book Meta Section (Mid Hardcover) */
+.full-tome-meta-section {
+  padding: 10px 14px 4px 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 5;
+}
+
+.full-tome-category-row {
+  margin-bottom: 5px;
+}
+
+.full-tome-category-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.full-tome-title {
+  font-family: var(--font-heading);
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.32;
+  margin: 0 0 3px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: #ffffff;
+}
+
+.full-tome-author {
+  font-size: 0.8rem;
+  color: #a1a1aa;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Physical Bookstore Obi Band / Belly Wrap across bottom third */
+.full-tome-obi-band {
+  position: relative;
+  margin-top: auto;
+  flex-shrink: 0;
+  padding: 12px 16px 14px 16px;
+  background: linear-gradient(180deg, rgba(22, 22, 26, 0.98) 0%, rgba(12, 12, 15, 0.99) 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 
+    0 -4px 18px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.obi-band-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+/* Button on Obi Band */
+.btn-full-book-details,
+.full-tome-obi-band .btn-card-details {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  width: 100% !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 16px !important;
+  background: #ffffff !important;
+  color: #09090b !important;
+  border-radius: var(--radius-md) !important;
+  font-size: 0.88rem !important;
+  font-weight: 700 !important;
+  border: 1px solid #ffffff !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.25), 0 4px 12px rgba(0, 0, 0, 0.6) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.btn-full-book-details:hover,
+.full-tome-obi-band .btn-card-details:hover {
+  background: #f4f4f5 !important;
+  color: #09090b !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 18px rgba(255, 255, 255, 0.4), 0 6px 16px rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Skeleton update for full-tome book card */
+.book-card-skeleton {
+  min-height: 500px;
+  border-radius: 4px 8px 8px 4px;
+}
+
+@media (max-width: 720px) {
+  .books-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .books-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .book-card.full-tome-book {
+    min-height: 460px;
+  }
+  .full-tome-3d-wrapper {
+    min-height: 445px;
+  }
+  .full-tome-cover {
+    min-height: 440px;
+  }
+  .full-tome-artwork-section {
+    height: 180px;
+  }
+}

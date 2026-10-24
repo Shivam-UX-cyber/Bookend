@@ -1,0 +1,43 @@
+/* ==========================================================================
+   Campus Book Exchange (Bookend) — Main Stylesheet Entry
+   Modular Architecture: Clean, Maintainable, Component-Scoped
+   ========================================================================== */
+
+/* 1. Tokens, Variables, Reset, Canvas & Core Utilities */
+@import './styles/variables.css';
+
+/* 2. Shared Components, Modals, Buttons, Spinners & Responsive Breakpoints */
+@import './styles/components.css';
+
+/* 3. Header, Brand Logo, Navigation & Mobile Drawer */
+@import './styles/navbar.css';
+
+/* 4. Campus Textbook Marketplace & Search / Filter Controls */
+@import './styles/marketplace.css';
+
+/* 5. Book Listing Cards & Media Presentation */
+@import './styles/book-card.css';
+
+/* 6. Book Details Showcase & Purchase Request Interactive Panel */
+@import './styles/book-detail.css';
+
+/* 7. Student Hub Dashboard & Quick Action Grid */
+@import './styles/dashboard.css';
+
+/* 8. Authentication (Login, Register, OTP Verification, Password Recovery) */
+@import './styles/auth.css';
+
+/* 9. Listing Creation & Modification Forms */
+@import './styles/forms.css';
+
+/* 10. Seller Inventory & My Listings Management */
+@import './styles/my-listings.css';
+
+/* 11. Purchase Requests & Campus Exchange Tracking */
+@import './styles/requests.css';
+
+/* 12. Student Profiles & Privacy Settings */
+@import './styles/profile.css';
+
+/* 13. Real-Time In-App Notifications Center & Live Indicator */
+@import './styles/notifications.css';
