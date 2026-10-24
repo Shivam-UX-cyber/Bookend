@@ -100,7 +100,7 @@ export const LoginPage = () => {
           {/* Email */}
           <div className={`form-group ${fieldErrors.email ? 'has-error' : ''}`}>
             <label htmlFor="email" className="form-label">
-              Personal Gmail Address <span className="required-indicator" aria-hidden="true">*</span>
+              Gmail Address <span className="required-indicator" aria-hidden="true">*</span>
             </label>
             <div className="input-wrapper">
               <Mail className="input-icon-left" size={18} aria-hidden="true" />

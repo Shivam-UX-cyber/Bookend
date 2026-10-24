@@ -85,7 +85,7 @@ export const validateGmail = (rawEmail = '') => {
     return {
       isValid: false,
       normalizedEmail: '',
-      errorMessage: 'Personal Gmail address is required.',
+      errorMessage: 'Gmail address is required.',
     };
   }
 
@@ -96,7 +96,7 @@ export const validateGmail = (rawEmail = '') => {
     return {
       isValid: false,
       normalizedEmail,
-      errorMessage: 'Only personal Gmail addresses (@gmail.com or @googlemail.com) are accepted.',
+      errorMessage: 'Only Gmail addresses (@gmail.com or @googlemail.com) are accepted.',
     };
   }
 
