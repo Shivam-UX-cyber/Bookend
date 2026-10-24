@@ -110,7 +110,7 @@ export const LoginPage = () => {
                 type="email"
                 value={formData.email}
                 onChange={handleChange}
-                placeholder="student.name@gmail.com"
+                placeholder="student@gmail.com"
                 required
                 autoComplete="email"
                 aria-invalid={Boolean(fieldErrors.email)}
