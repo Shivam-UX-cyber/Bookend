@@ -1,0 +1,47 @@
+server {
+    listen ${PORT};
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html index.htm;
+
+    # Gzip compression for text, script, style, and svg assets
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/xml application/json application/javascript application/xml+rss application/atom+xml image/svg+xml;
+
+    # Dedicated healthcheck endpoint for Render and container orchestrators
+    location ~ ^/(healthz|health)$ {
+        access_log off;
+        default_type text/plain;
+        return 200 "healthy\n";
+    }
+
+    # Vite content-hashed assets: cache immutably for 1 year
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        access_log off;
+    }
+
+    # Public static media and font assets
+    location ~* \.(?:ico|png|jpg|jpeg|svg|webp|woff2?|ttf|eot)$ {
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+        access_log off;
+    }
+
+    # Single Page Application fallback:
+    # Direct routes (e.g. /books, /dashboard, /login) serve index.html
+    # Never cache index.html so browsers immediately detect newly deployed script hashes
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    }
+}

@@ -1,0 +1,32 @@
+# Ignore dependencies (reinstalled cleanly inside the Docker build stage)
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ignore local build outputs
+dist
+dist-ssr
+
+# Ignore environment files (secrets or local configs must not be baked into images)
+.env
+.env.*
+*.env
+!.env.example
+*.local
+
+# Ignore test files, mocks, and test artifacts
+test/
+tests/
+coverage/
+
+# Ignore git metadata
+.git
+.gitignore
+
+# Ignore local editor and OS artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.md

@@ -1,58 +1,72 @@
 # Bookend — Production Deployment & Operations Guide
 
-This guide provides end-to-end instructions for configuring, deploying, operating, and troubleshooting Bookend across GitHub Actions, Docker Hub, Render, and Vercel.
+This guide provides end-to-end instructions for configuring, building, testing, deploying, operating, and troubleshooting Bookend across GitHub Actions, Docker Hub, and Render.
 
 ---
 
 ## 1. Repository Structure & Deployment Architecture
 
 ```
-Developer Push → GitHub (main/master) 
-                    │
-                    ▼
-          GitHub Actions CI/CD
-         ├── Frontend CI (npm test, vite build)
-         └── Backend CI (npm test, security & integration suites)
-                    │
-                    ▼ (Pass Gate)
-          Docker Image Build (./server)
-                    │
-                    ▼
-          Docker Hub Registry
-          ├── <username>/bookend-backend:<commit-sha>
-          └── <username>/bookend-backend:latest
-                    │
-                    ▼ (Webhook with ?imgURL=...)
-          Render Web Service (Backend API)
-          └── Prebuilt Docker Image Deployment
-                    ▲
-                    │ HTTPS API Requests (Credentials: Include)
-                    │ Cross-Site Cookies (SameSite=None; Secure)
-                    │
-          Vercel Deployment (Frontend React App)
+Developer Push → GitHub (main/master)
+                     │
+         ┌───────────┴───────────┐
+         ▼                       ▼
+Frontend CI/CD Workflow    Backend CI/CD Workflow
+(.github/workflows/         (.github/workflows/
+ bookend-frontend-cd.yml)    bookend-ci-cd.yml)
+         │                       │
+         ├── Frontend Tests      ├── Backend Tests (128)
+         │   (21 unit tests)     │   (Security & integration)
+         └── Production Build    └── PR Dry-Run Validation
+         │                       │
+         ▼ (Pass Gate)           ▼ (Pass Gate)
+Docker Image Build          Docker Image Build
+(Context: ./client)         (Context: ./server)
+Node 20 + Nginx 1.27        Node 20 Runtime
+         │                       │
+         ▼                       ▼
+Docker Hub Registry         Docker Hub Registry
+<user>/bookend-frontend     <user>/bookend-backend
+├── :<commit-sha>           ├── :<commit-sha>
+└── :latest                 └── :latest
+         │                       │
+         ▼ (Webhook Dispatch)    ▼ (Webhook Dispatch)
+Render Web Service          Render Web Service
+(Frontend Container)        (Backend API Container)
+https://<frontend>.         https://bookend-backend-
+onrender.com                7y88.onrender.com
+         │                       │
+         └────────◄──────────────┘
+           HTTPS API Requests (withCredentials)
+           Cross-Site Cookies (SameSite=None; Secure)
+           CSRF Header: X-Requested-With
+           Real-Time SSE: /api/notifications/stream
 ```
 
 ### Component Distribution
-- **Frontend:** React 19 + Vite deployed to **Vercel**. Communicates with the backend over HTTPS via `VITE_API_BASE_URL`.
-- **Backend:** Node.js 20 + Express 4 deployed as a prebuilt container to **Render**.
+- **Frontend Container:** React 19 + Vite compiled bundle served via lightweight Alpine Nginx container on **Render Web Service**.
+- **Backend Container:** Node.js 20 + Express 4 + Mongoose container deployed to **Render Web Service** (`https://bookend-backend-7y88.onrender.com`).
 - **Database:** MongoDB Atlas cluster with replica set support.
-- **Image Registry:** Docker Hub hosting immutable commit-SHA tagged images.
-- **CI/CD Orchestration:** GitHub Actions workflow (`.github/workflows/bookend-ci-cd.yml`).
+- **Image Registry:** Docker Hub hosting immutable commit-SHA tagged images for both frontend (`<username>/bookend-frontend`) and backend (`<username>/bookend-backend`).
+- **CI/CD Pipelines:** Independent GitHub Actions workflows:
+  - `.github/workflows/bookend-frontend-cd.yml` (Frontend build, test, Docker image, Render deploy).
+  - `.github/workflows/bookend-ci-cd.yml` (Backend test, Docker image, Render deploy).
 
 ---
 
 ## 2. Local Development Quickstart
 
 ### Prerequisites
-- Node.js 20.x or higher
-- MongoDB instance (local or MongoDB Atlas connection URI)
+- Node.js 20.x LTS or higher
+- MongoDB instance (local or MongoDB Atlas cluster connection string)
+- Docker Desktop (optional, for local container verification)
 - Git
 
 ### Backend Setup
 ```bash
 cd server
 cp .env.example .env
-# Edit .env with your local MongoDB URI and configuration
+# Edit .env with your local MongoDB URI and secrets
 npm install
 npm run dev
 # Server listens at http://localhost:5000 (Health check: http://localhost:5000/api/health)
@@ -71,85 +85,64 @@ npm run dev
 
 ## 3. Local Docker Build & Verification
 
-The Dockerfile is situated at `./server/Dockerfile` and expects the build context to be `./server`.
+Both the backend and frontend have self-contained multi-stage Dockerfiles.
 
-### Build Image
+### 3.1 Backend Docker Container
 ```bash
+# Build backend image
 docker build -t bookend-backend ./server
-```
 
-### Run Container Locally
-```bash
+# Run backend container locally
 docker run --rm -p 5000:5000 \
   -e PORT=5000 \
   -e NODE_ENV=production \
   -e CLIENT_URL=http://localhost:5173 \
-  -e MONGO_URI="mongodb+srv://<username>:<password>@<cluster>.mongodb.net/bookend?retryWrites=true&w=majority" \
-  -e JWT_SECRET="your_secure_random_production_secret_at_least_32_characters" \
+  -e MONGO_URI="mongodb+srv://<user>:<pwd>@<cluster>.mongodb.net/bookend?retryWrites=true&w=majority" \
+  -e JWT_SECRET="your_production_secret_at_least_32_characters" \
   bookend-backend
-```
 
-### Test Container Healthcheck
-```bash
+# Test backend health
 curl -i http://localhost:5000/api/health
 ```
-Expected response:
-```json
-{
-  "status": "healthy",
-  "service": "Campus Book Exchange Auth API",
-  "timestamp": "2026-10-25T...",
-  "environment": "production"
-}
+
+### 3.2 Frontend Docker Container
+```bash
+# Build frontend image (injecting production or local backend API URL)
+docker build \
+  --build-arg VITE_API_BASE_URL=https://bookend-backend-7y88.onrender.com \
+  -t bookend-frontend ./client
+
+# Run frontend container locally (honors dynamic PORT environment variable)
+docker run --rm -p 8080:8080 \
+  -e PORT=8080 \
+  bookend-frontend
+
+# Test frontend health endpoint
+curl -i http://localhost:8080/healthz
+
+# Test frontend SPA routing fallback
+curl -i http://localhost:8080/books
 ```
 
 ---
 
-## 4. Git Repository Setup & Safe Initial Push
-
-Before pushing code to a new remote repository:
-
-1. **Verify No Live Secrets Are Tracked:**
-   Ensure no `.env` files, production credentials, or `node_modules` are staged.
-   ```bash
-   git status
-   ```
-
-2. **Initialize Git Repository (if not already initialized):**
-   ```bash
-   git init
-   git branch -M main
-   ```
-
-3. **Stage and Commit Clean Codebase:**
-   ```bash
-   git add .
-   git commit -m "feat: complete Bookend implementation with CI/CD and Docker configuration"
-   ```
-
-4. **Add Remote and Push:**
-   ```bash
-   git remote add origin https://github.com/<your-github-username>/<your-repo-name>.git
-   git push -u origin main
-   ```
-
----
-
-## 5. Docker Hub Setup
+## 4. Docker Hub Repositories Setup
 
 1. Log in to [hub.docker.com](https://hub.docker.com).
-2. Create a new repository named `bookend-backend`.
+2. Create two repositories:
+   - **`bookend-backend`**: Hosts backend container images.
+   - **`bookend-frontend`**: Hosts frontend container images.
    - Set visibility to **Public** (or **Private**; if Private, see Registry Credentials section below).
-3. Generate an Access Token:
+3. Generate a Personal Access Token:
    - Go to **Account Settings** → **Security** → **Personal Access Tokens**.
    - Click **Generate New Token**.
    - Description: `bookend-github-actions`.
-   - Access permissions: **Read & Write** (or Read, Write, Delete if managing tags).
-   - Copy the generated token immediately (you will not be able to view it again).
+   - Access permissions: **Read & Write**.
+   - Copy the generated token immediately.
 
 ---
 
-## 6. GitHub Actions Configuration
+## 5. GitHub Actions Configuration
 
 In your GitHub repository, navigate to **Settings** → **Secrets and variables** → **Actions**.
 
@@ -161,115 +154,99 @@ In your GitHub repository, navigate to **Settings** → **Secrets and variables*
 ### Repository Secrets (Secrets Tab)
 | Secret Name | Example Placeholder | Description |
 |---|---|---|
-| `DOCKERHUB_TOKEN` | `dckr_pat_xxxx...` | Personal Access Token generated in Docker Hub |
-| `RENDER_DEPLOY_HOOK` | `https://api.render.com/deploy/srv-xxx?key=yyy` | Webhook URL from your Render service |
+| `DOCKERHUB_TOKEN` | `dckr_pat_xxxx...` | Personal Access Token generated in Docker Hub (used by both frontend & backend pipelines) |
+| `RENDER_DEPLOY_HOOK` | `https://api.render.com/deploy/srv-backend?key=xxx` | Backend Render Web Service Deploy Hook URL |
+| `RENDER_FRONTEND_DEPLOY_HOOK` | `https://api.render.com/deploy/srv-frontend?key=yyy` | Frontend Render Web Service Deploy Hook URL |
 
 ---
 
-## 7. Render Web Service Setup
+## 6. Render Web Services Setup
 
-1. Log in to [render.com](https://render.com) and click **New +** → **Web Service**.
+### 6.1 Backend Render Web Service
+1. In [render.com](https://render.com), click **New +** → **Web Service**.
 2. Select **Deploy an existing image from a registry**.
-3. Image URL:
-   - For Public repository: `docker.io/<your-dockerhub-username>/bookend-backend:latest`
-   - For Private repository: Click **Add Image Registry Credential** and provide your Docker Hub username and a read-only Docker Hub Personal Access Token.
-4. Name your service (e.g. `bookend-backend`).
-5. Choose region, instance type (Free / Starter), and environment settings.
-6. Under **Advanced Settings**:
+3. Image URL: `docker.io/<your-dockerhub-username>/bookend-backend:latest`
+4. Name: `bookend-backend` (e.g. `bookend-backend-7y88`).
+5. Under **Advanced Settings**:
    - Health Check Path: `/api/health`
-7. Click **Create Web Service**.
-8. In the newly created service dashboard:
-   - Navigate to **Settings** → **Deploy Hook**.
-   - Click **Create Deploy Hook** or copy the existing URL.
-   - Add this URL to your GitHub repository secrets as `RENDER_DEPLOY_HOOK`.
+6. Click **Create Web Service**.
+7. In **Settings** → **Deploy Hook**, click **Create Deploy Hook** and copy the URL into GitHub Secrets as `RENDER_DEPLOY_HOOK`.
+8. In **Environment**, configure:
+   - `NODE_ENV`: `production`
+   - `MONGO_URI`: MongoDB connection string
+   - `JWT_SECRET`: Random string (min 32 characters)
+   - `CLIENT_URL`: URL of your frontend Render service, e.g. `https://bookend-frontend.onrender.com` (no trailing slash)
+   - `COOKIE_SAME_SITE`: `none`
+   - `COOKIE_SECURE`: `true`
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `EMAIL_USER`, `EMAIL_APP_PASSWORD`
 
-### Render Runtime Environment Variables
-In Render, navigate to **Environment** and add the following variables:
+### 6.2 Frontend Render Web Service
+1. In [render.com](https://render.com), click **New +** → **Web Service**.
+2. Select **Deploy an existing image from a registry**.
+3. Image URL: `docker.io/<your-dockerhub-username>/bookend-frontend:latest`
+   - *Note:* If your Docker Hub repository is private, click **Add Image Registry Credential** and provide your Docker Hub username and a read-only Docker Hub Personal Access Token.
+4. Name: `bookend-frontend` (or your preferred service name).
+5. Region: Choose the same region as your backend service (e.g., Oregon / Frankfurt) to minimize latency.
+6. Instance Type: **Free** or **Starter**.
+7. Under **Advanced Settings**:
+   - Health Check Path: `/healthz`
+8. Click **Create Web Service**.
+9. In **Settings** → **Deploy Hook**, click **Create Deploy Hook** and copy the webhook URL into GitHub Secrets as `RENDER_FRONTEND_DEPLOY_HOOK`.
 
-| Environment Variable | Required | Description |
-|---|---|---|
-| `NODE_ENV` | Yes | Set to `production` |
-| `PORT` | Auto | Render automatically sets this (e.g. `10000`); our Dockerfile binds dynamically |
-| `CLIENT_URL` | Yes | URL of your Vercel frontend, e.g. `https://bookend.vercel.app` (no trailing slash) |
-| `MONGO_URI` | Yes | MongoDB Atlas connection string (use replica set cluster URI) |
-| `JWT_SECRET` | Yes | High-entropy string (min 32 characters, e.g. generated via `openssl rand -hex 32`) |
-| `JWT_EXPIRES_IN` | No | Defaults to `7d` |
-| `COOKIE_SAME_SITE` | No | Defaults to `none` in production (required for cross-site Vercel-to-Render cookies) |
-| `COOKIE_SECURE` | No | Defaults to `true` in production |
-| `SMTP_HOST` | Yes | E.g. `smtp.gmail.com` |
-| `SMTP_PORT` | Yes | E.g. `465` |
-| `SMTP_SECURE` | Yes | E.g. `true` |
-| `EMAIL_USER` | Yes | Gmail address for sending OTPs |
-| `EMAIL_APP_PASSWORD` | Yes | 16-character Google App Password (never personal password) |
-
----
-
-## 8. Vercel Frontend Configuration
-
-1. Import your GitHub repository into [vercel.com](https://vercel.com).
-2. Configure project root directory to `client`.
-3. Framework Preset: **Vite**.
-4. In **Project Settings** → **Environment Variables**, add:
-
-| Variable Name | Value | Purpose |
-|---|---|---|
-| `VITE_API_BASE_URL` | `https://<your-render-service>.onrender.com` | Base URL of your backend API on Render (no trailing slash) |
-
-5. Deploy project. Once deployed, copy the production Vercel domain (e.g. `https://bookend.vercel.app`) and ensure it matches `CLIENT_URL` in your Render backend settings.
+### 6.3 CORS & Cookie Cross-Origin Alignment
+Once your frontend Web Service is created on Render:
+1. Copy its public domain (e.g., `https://bookend-frontend-xxxx.onrender.com`).
+2. Navigate to your backend service on Render → **Environment**.
+3. Update `CLIENT_URL` to match this domain exactly:
+   ```
+   CLIENT_URL=https://bookend-frontend-xxxx.onrender.com
+   ```
+   *(Multiple origins can be separated by commas, e.g. `https://bookend-frontend-xxxx.onrender.com,http://localhost:5173`)*
+4. Backend CORS and CSRF middleware will automatically validate requests from this origin.
+5. In production, session cookies are transmitted with `SameSite=None; Secure; Partitioned`, ensuring login sessions, OTP verifications, and real-time SSE notifications function smoothly across domains.
 
 ---
 
-## 9. Operations, Monitoring & Rollbacks
+## 7. Operations, Monitoring & Rollbacks
 
 ### Inspecting Workflow Runs
-- Go to the **Actions** tab in GitHub to view real-time CI logs for Frontend CI, Backend CI, Docker build, and Render deployment dispatch.
+- Go to the **Actions** tab in GitHub:
+  - **Bookend Frontend CI/CD Pipeline**: Triggers on changes to `client/**` or manual dispatch.
+  - **Bookend CI/CD Pipeline**: Triggers on changes to backend or manual dispatch.
 
 ### Viewing Container Health & Logs
-- In Render Dashboard → **Logs**, monitor application startup logs:
+- In Render Dashboard → **Logs**, monitor frontend Nginx logs:
   ```
-  [Server] Campus Book Exchange API running on port 10000 (production)
-  [Server] Allowed Origins: https://bookend.vercel.app
-  [Server] Health Endpoint: http://localhost:10000/api/health
-  [Database] MongoDB Connected: cluster0-shard-00-00.mongodb.net
+  20-envsubst-on-templates.sh: Running envsubst on /etc/nginx/templates/default.conf.template to /etc/nginx/conf.d/default.conf
+  Configuration complete; ready for start up
+  start worker process
   ```
 - Test health from terminal:
   ```bash
-  curl -i https://<your-render-service>.onrender.com/api/health
+  # Test frontend health
+  curl -i https://<your-frontend-service>.onrender.com/healthz
+
+  # Test backend health
+  curl -i https://bookend-backend-7y88.onrender.com/api/health
   ```
 
 ### Rollback Procedure
-If a production deployment causes unexpected errors:
-1. Identify the previous stable Git commit SHA.
-2. In Docker Hub, verify that the image tag `bookend-backend:<previous-sha>` exists.
+If a production release introduces a bug:
+1. Identify the previous stable Git commit SHA (e.g., `a1b2c3d`).
+2. In Docker Hub, verify the image tag exists:
+   - Frontend: `<username>/bookend-frontend:<previous-sha>`
+   - Backend: `<username>/bookend-backend:<previous-sha>`
 3. In Render Dashboard:
-   - Navigate to **Settings** → **Image URL**.
-   - Change tag to `docker.io/<username>/bookend-backend:<previous-sha>`.
+   - Navigate to the respective service → **Settings** → **Image URL**.
+   - Change tag from `latest` to the exact `<previous-sha>`.
    - Click **Save Changes** → **Manual Deploy** → **Deploy latest image**.
 
 ---
 
-## 10. Credential Rotation & Incident Response
+## 8. Security & Credential Rotation
 
-If a secret is ever exposed or compromised:
-
-1. **MongoDB Credentials:**
-   - Go to MongoDB Atlas → **Database Access**.
-   - Edit the user password or delete the user and create a replacement.
-   - Update `MONGO_URI` in Render Environment settings. Render will automatically redeploy.
-
-2. **JWT Secret:**
-   - Generate a new random secret (`openssl rand -hex 32`).
-   - Update `JWT_SECRET` in Render.
-   - Existing active sessions will be invalidated safely, requiring users to log in again.
-
-3. **Docker Hub Token:**
-   - In Docker Hub → **Account Settings** → **Security**, delete the compromised token.
-   - Generate a new token and update `DOCKERHUB_TOKEN` in GitHub Secrets.
-
-4. **Render Deploy Hook:**
-   - In Render Dashboard → **Settings** → **Deploy Hook**, delete the hook and create a new one.
-   - Update `RENDER_DEPLOY_HOOK` in GitHub Secrets.
-
-5. **Gmail App Password:**
-   - In Google Account Security → **App Passwords**, revoke the existing password.
-   - Generate a new 16-character password and update `EMAIL_APP_PASSWORD` in Render.
+If any secret or token is compromised:
+1. **Docker Hub Token:** Revoke in Docker Hub Account Settings, generate a replacement, and update `DOCKERHUB_TOKEN` in GitHub Secrets.
+2. **Render Deploy Hooks:** In Render Settings → Deploy Hook, delete the compromised hook, generate a new one, and update `RENDER_FRONTEND_DEPLOY_HOOK` or `RENDER_DEPLOY_HOOK` in GitHub Secrets.
+3. **JWT Secret:** Generate a new 32-byte hexadecimal string (`openssl rand -hex 32`) and update `JWT_SECRET` in Render backend environment settings.
+4. **Public Exposure Notice:** `VITE_*` variables (such as `VITE_API_BASE_URL`) are public to browser users and baked into the frontend bundle. Never store database credentials, private keys, or passwords in `client/` or `VITE_*` variables.

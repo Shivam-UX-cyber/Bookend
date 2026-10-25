@@ -6,10 +6,10 @@ Bookend is a full-stack, peer-to-peer campus textbook marketplace designed for u
 
 ## Architecture Overview
 
-- **Frontend:** React 19, Vite, React Router 7, Vanilla CSS design token system (Vercel deployment).
+- **Frontend:** React 19, Vite, React Router 7, Vanilla CSS design token system (multi-stage Docker container deployed to Render via Nginx Alpine).
 - **Backend:** Node.js 20 LTS, Express 4, Mongoose 8, Helmet, CORS, CSRF defense, Cookie session authentication with JWT and `tokenVersion` revocation (Render Docker container deployment).
 - **Database:** MongoDB Atlas with atomic conditional updates, concurrency race protection, and integer paise currency boundaries.
-- **CI/CD Pipeline:** GitHub Actions automated test suites (148 tests across frontend and backend), multi-stage Docker image build, Docker Hub registry publication, and automated Render deployment.
+- **CI/CD Pipeline:** Dual independent GitHub Actions pipelines (149 tests across frontend and backend), multi-stage Docker builds, Docker Hub registry publication, and automated Render deployment triggers.
 
 ---
 
@@ -18,21 +18,25 @@ Bookend is a full-stack, peer-to-peer campus textbook marketplace designed for u
 ```
 ├── .github/
 │   └── workflows/
-│       └── bookend-ci-cd.yml      # GitHub Actions CI/CD Pipeline
-├── client/                        # React 19 + Vite frontend
-│   ├── src/                       # Components, pages, context, styles
-│   ├── test/                      # Frontend unit test suites
-│   ├── .env.example               # Frontend environment template
+│       ├── bookend-ci-cd.yml          # Backend GitHub Actions CI/CD Pipeline
+│       └── bookend-frontend-cd.yml    # Frontend GitHub Actions CI/CD Pipeline
+├── client/                            # React 19 + Vite frontend
+│   ├── src/                           # Components, pages, context, styles
+│   ├── test/                          # Frontend unit test suites
+│   ├── Dockerfile                     # Multi-stage production container build (Nginx)
+│   ├── nginx.conf.template            # Runtime dynamic port template & SPA routing
+│   ├── .dockerignore                  # Docker build context exclusions
+│   ├── .env.example                   # Frontend environment template
 │   └── package.json
-├── server/                        # Express 4 + Node.js backend
-│   ├── src/                       # Controllers, models, routes, services
-│   ├── test/                      # Security & integration test suites
-│   ├── Dockerfile                 # Multi-stage production container build
-│   ├── .dockerignore              # Docker build context exclusions
-│   ├── .env.example               # Backend environment template
+├── server/                            # Express 4 + Node.js backend
+│   ├── src/                           # Controllers, models, routes, services
+│   ├── test/                          # Security & integration test suites
+│   ├── Dockerfile                     # Multi-stage production container build (Node)
+│   ├── .dockerignore                  # Docker build context exclusions
+│   ├── .env.example                   # Backend environment template
 │   └── package.json
-└── docs/                          # Engineering & operational documentation
-    ├── deployment-guide.md        # Comprehensive deployment and operations guide
+└── docs/                              # Engineering & operational documentation
+    ├── deployment-guide.md            # Comprehensive deployment and operations guide
     ├── bookend-engineering-audit.md
     ├── bookend-fix-report.md
     ├── bookend-test-report.md
@@ -79,22 +83,28 @@ Tests cover:
 - Student profile serialization and privacy preferences (`test/profile-integration.test.js`)
 - Notification system, unread count deduplication, and isolated SSE streams (`test/notification-integration.test.js`)
 
-### Run All Frontend Tests (20 Tests)
+### Run All Frontend Tests (21 Tests)
 ```bash
 cd client
 npm test
 ```
 
-### Production Build
+### Production Bundling & Container Builds
 ```bash
-cd client
-npm run build
+# Frontend Vite build
+cd client && npm run build
+
+# Frontend Docker container build (Node.js 20 build stage + Nginx 1.27 runtime)
+docker build -t bookend-frontend ./client
+
+# Backend Docker container build (Node.js 20 production runtime)
+docker build -t bookend-backend ./server
 ```
 
 ---
 
 ## Production Deployment & CI/CD
 
-For complete step-by-step instructions on setting up GitHub Actions secrets, Docker Hub repositories, Render web services, and Vercel frontend deployments, refer to:
+For complete step-by-step instructions on setting up GitHub Actions secrets, Docker Hub repositories, Render web services for both frontend and backend, refer to:
 
 👉 **[Production Deployment & Operations Guide](docs/deployment-guide.md)**

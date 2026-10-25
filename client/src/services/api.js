@@ -2,7 +2,8 @@
  * Central API client with normalized ApiError class and credentials: 'include' for HTTP-only cookies
  */
 
-const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || '';
+const rawBaseUrl = import.meta.env?.VITE_API_BASE_URL || '';
+const API_BASE_URL = rawBaseUrl.replace(/\/+$/, '');
 
 export class ApiError extends Error {
   constructor(message, status = 0, data = null, errorFlags = {}) {

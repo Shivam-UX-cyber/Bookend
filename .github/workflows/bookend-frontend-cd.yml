@@ -1,0 +1,159 @@
+name: Bookend Frontend CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'client/**'
+      - '.github/workflows/bookend-frontend-cd.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'client/**'
+      - '.github/workflows/bookend-frontend-cd.yml'
+  workflow_dispatch:
+
+# Restrict default permissions to read-only for repository contents
+permissions:
+  contents: read
+
+jobs:
+  # ============================================================================
+  # 1. Frontend Continuous Integration (Unit Tests & Bundle Compilation)
+  # ============================================================================
+  frontend-ci:
+    name: Frontend CI (Test & Build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies (clean installation)
+        run: npm ci
+        working-directory: client
+
+      - name: Run frontend unit tests
+        run: npm test
+        working-directory: client
+
+      - name: Build frontend production bundle
+        run: npm run build
+        working-directory: client
+        env:
+          VITE_API_BASE_URL: https://bookend-backend-7y88.onrender.com
+
+  # ============================================================================
+  # 2. Pull Request Docker Validation (Test Image Build without publishing)
+  # ============================================================================
+  docker-pr-validation:
+    name: Validate Frontend Docker Build (PR)
+    needs: [ frontend-ci ]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build frontend Docker image (dry-run, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./client
+          file: ./client/Dockerfile
+          build-args: |
+            VITE_API_BASE_URL=https://bookend-backend-7y88.onrender.com
+          push: false
+          tags: bookend-frontend:pr-test
+
+  # ============================================================================
+  # 3. Publish to Docker Hub & Trigger Render Deployment (Default Branch Only)
+  # ============================================================================
+  publish-and-deploy:
+    name: Publish Frontend Image & Deploy to Render
+    needs: [ frontend-ci ]
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate Docker metadata and OCI labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.DOCKERHUB_USERNAME }}/bookend-frontend
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push frontend Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./client
+          file: ./client/Dockerfile
+          build-args: |
+            VITE_API_BASE_URL=https://bookend-backend-7y88.onrender.com
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trigger Render Frontend Deployment (Exact Commit Tag)
+        run: |
+          set -euo pipefail
+
+          if [ -z "${{ secrets.RENDER_FRONTEND_DEPLOY_HOOK }}" ]; then
+            echo "Error: RENDER_FRONTEND_DEPLOY_HOOK secret is not configured in repository."
+            exit 1
+          fi
+
+          if [ -z "${{ vars.DOCKERHUB_USERNAME }}" ]; then
+            echo "Error: DOCKERHUB_USERNAME variable is not configured in repository."
+            exit 1
+          fi
+
+          # Target the exact immutable commit-SHA-tagged image published in the previous step
+          IMAGE_URI="docker.io/${{ vars.DOCKERHUB_USERNAME }}/bookend-frontend:${{ github.sha }}"
+          ENCODED_IMAGE_URI=$(node -e "console.log(encodeURIComponent(process.argv[1]))" "$IMAGE_URI")
+
+          HOOK_URL="${{ secrets.RENDER_FRONTEND_DEPLOY_HOOK }}"
+          if [[ "$HOOK_URL" == *"?"* ]]; then
+            DEPLOY_URL="${HOOK_URL}&imgURL=${ENCODED_IMAGE_URI}"
+          else
+            DEPLOY_URL="${HOOK_URL}?imgURL=${ENCODED_IMAGE_URI}"
+          fi
+
+          echo "Initiating Render frontend deployment for image: $IMAGE_URI"
+
+          # Perform deployment webhook request without printing sensitive credentials
+          HTTP_RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST "$DEPLOY_URL")
+
+          if [ "$HTTP_RESPONSE" -ge 200 ] && [ "$HTTP_RESPONSE" -lt 300 ]; then
+            echo "Render frontend deployment triggered successfully (HTTP $HTTP_RESPONSE)."
+          else
+            echo "Error: Render frontend deployment hook returned failure HTTP status: $HTTP_RESPONSE"
+            if [ -f response.txt ]; then
+              echo "Response payload:"
+              cat response.txt
+            fi
+            exit 1
+          fi

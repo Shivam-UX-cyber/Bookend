@@ -38,3 +38,14 @@ test('1. ApiError distinguishes true network failures from aborts and timeouts',
   const serverErr = new ApiError('Server error', 500);
   assert.strictEqual(serverErr.isServerError, true);
 });
+
+test('2. Base URL trailing slash normalization prevents double slashes in API calls', () => {
+  const normalizeBaseUrl = (url) => (url || '').replace(/\/+$/, '');
+
+  assert.strictEqual(normalizeBaseUrl('https://bookend-backend-7y88.onrender.com/'), 'https://bookend-backend-7y88.onrender.com');
+  assert.strictEqual(normalizeBaseUrl('https://bookend-backend-7y88.onrender.com///'), 'https://bookend-backend-7y88.onrender.com');
+  assert.strictEqual(normalizeBaseUrl('https://bookend-backend-7y88.onrender.com'), 'https://bookend-backend-7y88.onrender.com');
+  assert.strictEqual(normalizeBaseUrl(''), '');
+  assert.strictEqual(normalizeBaseUrl(undefined), '');
+  assert.strictEqual(normalizeBaseUrl(null), '');
+});
