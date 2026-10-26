@@ -14,6 +14,9 @@ import { csrfProtection } from './middleware/csrfMiddleware.js';
 
 const app = express();
 
+// Configure Express proxy trust for reverse proxies (e.g. Render edge load balancer: 1 hop in production)
+app.set('trust proxy', config.trustProxy);
+
 // Validate environment variables on startup (throws on fatal configuration)
 if (process.env.NODE_ENV !== 'test') {
   try {

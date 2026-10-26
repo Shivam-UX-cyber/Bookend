@@ -8,10 +8,17 @@ export const generalLimiter = rateLimit({
   max: process.env.NODE_ENV === 'production' ? 300 : 3000, // Generous headroom for dev/testing
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) =>
-    process.env.NODE_ENV === 'test' ||
-    req.path === '/health' ||
-    req.path === '/notifications/stream',
+  validate: {
+    xForwardedForHeader: false,
+  },
+  skip: (req) => {
+    if (req.headers['x-test-rate-limit'] === 'true') return false;
+    return (
+      process.env.NODE_ENV === 'test' ||
+      req.path === '/health' ||
+      req.path === '/notifications/stream'
+    );
+  },
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again later.',
@@ -23,10 +30,16 @@ export const generalLimiter = rateLimit({
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 20 : 120, // 20 in prod, 120 in dev
+  max: process.env.NODE_ENV === 'production' ? 30 : 120, // 30 in prod, 120 in dev
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test',
+  validate: {
+    xForwardedForHeader: false,
+  },
+  skip: (req) => {
+    if (req.headers['x-test-rate-limit'] === 'true') return false;
+    return process.env.NODE_ENV === 'test';
+  },
   message: {
     success: false,
     message: 'Too many authentication attempts from this IP. Please try again after 15 minutes.',
@@ -38,10 +51,16 @@ export const authLimiter = rateLimit({
  */
 export const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 10 : 60, // 10 in prod, 60 in dev
+  max: process.env.NODE_ENV === 'production' ? 25 : 120, // 25 in prod (accommodates shared campus NAT), 120 in dev
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test',
+  validate: {
+    xForwardedForHeader: false,
+  },
+  skip: (req) => {
+    if (req.headers['x-test-rate-limit'] === 'true') return false;
+    return process.env.NODE_ENV === 'test';
+  },
   message: {
     success: false,
     message: 'Too many OTP requests from this IP. Please try again after 15 minutes.',

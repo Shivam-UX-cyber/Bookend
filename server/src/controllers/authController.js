@@ -776,8 +776,8 @@ export const forgotPassword = async (req, res) => {
         }
       );
       return res.status(200).json({
-        success: true,
-        message: 'If an account exists with this Gmail address, a 6-digit password reset code has been sent.',
+        success: false,
+        message: 'Failed to dispatch verification email. Please try again.',
         cooldownSeconds: 0,
         deliveryFailed: true,
       });

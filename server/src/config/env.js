@@ -12,12 +12,24 @@ export const config = {
   cookieSecure: process.env.COOKIE_SECURE !== undefined
     ? process.env.COOKIE_SECURE === 'true'
     : (process.env.NODE_ENV === 'production'),
+  trustProxy: (() => {
+    if (process.env.TRUST_PROXY !== undefined) {
+      const val = process.env.TRUST_PROXY.trim().toLowerCase();
+      if (val === 'true') return true;
+      if (val === 'false') return false;
+      const num = parseInt(val, 10);
+      return isNaN(num) ? process.env.TRUST_PROXY : num;
+    }
+    return process.env.NODE_ENV === 'production' ? 1 : false;
+  })(),
   smtp: {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT, 10) || 465,
-    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
-    user: process.env.EMAIL_USER || '',
-    appPassword: process.env.EMAIL_APP_PASSWORD || '',
+    secure: process.env.SMTP_SECURE !== undefined
+      ? process.env.SMTP_SECURE === 'true'
+      : (parseInt(process.env.SMTP_PORT, 10) || 465) === 465,
+    user: (process.env.EMAIL_USER || '').trim(),
+    appPassword: (process.env.EMAIL_APP_PASSWORD || '').replace(/\s+/g, '').trim(),
   },
 };
 

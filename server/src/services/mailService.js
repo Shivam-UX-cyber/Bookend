@@ -32,6 +32,9 @@ const createTransporter = () => {
       user: config.smtp.user,
       pass: config.smtp.appPassword,
     },
+    connectionTimeout: 10000, // 10 seconds
+    greetingTimeout: 10000,   // 10 seconds
+    socketTimeout: 15000,     // 15 seconds
   });
 };
 
@@ -96,11 +99,18 @@ const escapeHtml = (str) => {
  */
 export const sendRegistrationOtpEmail = async (toEmail, name, otp) => {
   if (mailSenderOverride) {
-    return mailSenderOverride({ type: 'registration', to: toEmail, name, otp });
+    const overrideResult = await mailSenderOverride({ type: 'registration', to: toEmail, name, otp });
+    if (overrideResult && Array.isArray(overrideResult.rejected) && overrideResult.rejected.length > 0) {
+      throw new Error(`Email provider rejected recipient: ${overrideResult.rejected.join(', ')}`);
+    }
+    if (overrideResult && Array.isArray(overrideResult.accepted) && overrideResult.accepted.length === 0) {
+      throw new Error('Email provider did not accept delivery for recipient.');
+    }
+    return overrideResult || { messageId: 'override-msg-id', accepted: [toEmail] };
   }
 
   if (!isSmtpConfigured()) {
-    console.warn('\x1b[33m%s\x1b[0m', `[Email] Notice: SMTP is not configured with real Gmail credentials. Email to ${toEmail} skipped.`);
+    console.warn('\x1b[33m%s\x1b[0m', `[Email] Notice: SMTP is not configured with real Gmail credentials. Registration email skipped.`);
     throw new Error('SMTP email service is not configured. Please set EMAIL_USER and EMAIL_APP_PASSWORD in server/.env.');
   }
 
@@ -124,12 +134,22 @@ export const sendRegistrationOtpEmail = async (toEmail, name, otp) => {
     `,
   });
 
-  await transporter.sendMail({
+  const info = await transporter.sendMail({
     from: `"Campus Book Exchange" <${config.smtp.user}>`,
     to: toEmail,
     subject: `${otp} is your verification code — Campus Book Exchange`,
     html,
   });
+
+  // Verify that the email provider actually accepted the message for delivery
+  if (info && Array.isArray(info.rejected) && info.rejected.length > 0) {
+    throw new Error(`Email provider rejected delivery to recipient: ${info.rejected.join(', ')}`);
+  }
+  if (info && Array.isArray(info.accepted) && info.accepted.length === 0) {
+    throw new Error('Email provider did not accept delivery for recipient.');
+  }
+
+  return { messageId: info.messageId, accepted: info.accepted };
 };
 
 /**
@@ -139,11 +159,18 @@ export const sendRegistrationOtpEmail = async (toEmail, name, otp) => {
  */
 export const sendPasswordResetOtpEmail = async (toEmail, otp) => {
   if (mailSenderOverride) {
-    return mailSenderOverride({ type: 'reset', to: toEmail, otp });
+    const overrideResult = await mailSenderOverride({ type: 'reset', to: toEmail, otp });
+    if (overrideResult && Array.isArray(overrideResult.rejected) && overrideResult.rejected.length > 0) {
+      throw new Error(`Email provider rejected recipient: ${overrideResult.rejected.join(', ')}`);
+    }
+    if (overrideResult && Array.isArray(overrideResult.accepted) && overrideResult.accepted.length === 0) {
+      throw new Error('Email provider did not accept delivery for recipient.');
+    }
+    return overrideResult || { messageId: 'override-msg-id', accepted: [toEmail] };
   }
 
   if (!isSmtpConfigured()) {
-    console.warn('\x1b[33m%s\x1b[0m', `[Email] Notice: SMTP is not configured with real Gmail credentials. Password reset email to ${toEmail} skipped.`);
+    console.warn('\x1b[33m%s\x1b[0m', `[Email] Notice: SMTP is not configured with real Gmail credentials. Password reset email skipped.`);
     throw new Error('SMTP email service is not configured. Please set EMAIL_USER and EMAIL_APP_PASSWORD in server/.env.');
   }
 
@@ -166,10 +193,20 @@ export const sendPasswordResetOtpEmail = async (toEmail, otp) => {
     `,
   });
 
-  await transporter.sendMail({
+  const info = await transporter.sendMail({
     from: `"Campus Book Exchange Security" <${config.smtp.user}>`,
     to: toEmail,
     subject: `${otp} is your password reset code — Campus Book Exchange`,
     html,
   });
+
+  // Verify that the email provider actually accepted the message for delivery
+  if (info && Array.isArray(info.rejected) && info.rejected.length > 0) {
+    throw new Error(`Email provider rejected delivery to recipient: ${info.rejected.join(', ')}`);
+  }
+  if (info && Array.isArray(info.accepted) && info.accepted.length === 0) {
+    throw new Error('Email provider did not accept delivery for recipient.');
+  }
+
+  return { messageId: info.messageId, accepted: info.accepted };
 };
