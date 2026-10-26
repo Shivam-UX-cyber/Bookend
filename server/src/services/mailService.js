@@ -23,6 +23,111 @@ export const isSmtpConfigured = () => {
   );
 };
 
+/**
+ * Masks an email address to protect student privacy in server logs.
+ * Example: 'shivamkumar785707@gmail.com' -> 's***7@gmail.com'
+ * @param {string} email
+ * @returns {string}
+ */
+export const maskEmail = (email) => {
+  if (!email || typeof email !== 'string') return '***';
+  const parts = email.trim().split('@');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return '***';
+  const [local, domain] = parts;
+  if (local.length <= 2) {
+    return `${local[0]}***@${domain}`;
+  }
+  return `${local[0]}***${local[local.length - 1]}@${domain}`;
+};
+
+/**
+ * Sanitizes an error message or SMTP provider string by removing any sensitive patterns:
+ * - 6-digit numeric sequences (OTPs)
+ * - 16-character continuous alphabetic sequences (Gmail App Passwords)
+ * - Bearer tokens, passwords, secrets, or cookies
+ * @param {string} text
+ * @returns {string}
+ */
+export const sanitizeProviderErrorDetails = (text) => {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    // Redact 6-digit OTP codes (exact boundary)
+    .replace(/\b\d{6}\b/g, '[REDACTED_OTP]')
+    // Redact 16-character App Passwords
+    .replace(/\b[a-zA-Z]{16}\b/g, '[REDACTED_APP_PASSWORD]')
+    // Redact Bearer tokens
+    .replace(/bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED_TOKEN]')
+    // Redact password/token/key assignments (e.g. pass=xyz, password: xyz, secret=xyz)
+    .replace(/(password|passwd|pass|secret|token|apiKey|api_key|auth)\s*[:=]\s*([^\s,;]+)/gi, '$1=[REDACTED]')
+    // Redact basic auth header tokens in string
+    .replace(/basic\s+[A-Za-z0-9+/=]+/gi, 'Basic [REDACTED_AUTH]');
+};
+
+/**
+ * Safely extracts non-sensitive SMTP diagnostics from an Error or Nodemailer response.
+ * Strictly guarantees that passwords, tokens, cookies, and 6-digit OTP codes are NEVER logged.
+ * @param {string} operation
+ * @param {Error|object} err
+ * @param {string} [recipientEmail]
+ * @returns {object}
+ */
+export const extractMailDiagnostics = (operation, err, recipientEmail = null) => {
+  const errorObj = err || {};
+  const rawMessage = errorObj.message || String(errorObj);
+  const rawResponse = errorObj.response || null;
+
+  return {
+    operation: operation || 'unknownMailOperation',
+    errorName: errorObj.name || 'Error',
+    errorCode: errorObj.code || null,
+    responseCode: errorObj.responseCode || (typeof errorObj.response === 'string' && errorObj.response.match(/^\d{3}/) ? parseInt(errorObj.response.substring(0, 3), 10) : null),
+    command: errorObj.command || null,
+    syscall: errorObj.syscall || null,
+    smtpHost: config.smtp?.host || 'smtp.gmail.com',
+    smtpPort: config.smtp?.port || 465,
+    smtpSecure: Boolean(config.smtp?.secure),
+    isConfigured: isSmtpConfigured(),
+    recipient: recipientEmail ? maskEmail(recipientEmail) : null,
+    details: sanitizeProviderErrorDetails(rawResponse || rawMessage),
+    timestamp: new Date().toISOString(),
+  };
+};
+
+/**
+ * Formats and logs a safe, structured diagnostic message to console.error
+ * @param {string} operation
+ * @param {Error|object} err
+ * @param {string} [recipientEmail]
+ * @returns {object}
+ */
+export const logSafeMailError = (operation, err, recipientEmail = null) => {
+  const diagnostic = extractMailDiagnostics(operation, err, recipientEmail);
+  console.error('\x1b[31m%s\x1b[0m', `[MailService Error] ${JSON.stringify(diagnostic)}`);
+  return diagnostic;
+};
+
+/**
+ * Logs a safe, structured diagnostic message to console.log on successful mail delivery
+ * @param {string} operation
+ * @param {object} info
+ * @param {string} [recipientEmail]
+ * @returns {object}
+ */
+export const logSafeMailSuccess = (operation, info, recipientEmail = null) => {
+  const accepted = Array.isArray(info?.accepted) ? info.accepted.map(maskEmail) : [];
+  const logData = {
+    operation: operation || 'unknownMailOperation',
+    status: 'accepted',
+    messageId: info?.messageId || null,
+    acceptedRecipients: accepted,
+    smtpHost: config.smtp?.host || 'smtp.gmail.com',
+    smtpPort: config.smtp?.port || 465,
+    timestamp: new Date().toISOString(),
+  };
+  console.log('\x1b[32m%s\x1b[0m', `[MailService Success] ${JSON.stringify(logData)}`);
+  return logData;
+};
+
 const createTransporter = () => {
   return nodemailer.createTransport({
     host: config.smtp.host,
@@ -98,20 +203,39 @@ const escapeHtml = (str) => {
  * @param {string} otp 
  */
 export const sendRegistrationOtpEmail = async (toEmail, name, otp) => {
+  const operation = 'sendRegistrationOtpEmail';
+
   if (mailSenderOverride) {
-    const overrideResult = await mailSenderOverride({ type: 'registration', to: toEmail, name, otp });
+    let overrideResult;
+    try {
+      overrideResult = await mailSenderOverride({ type: 'registration', to: toEmail, name, otp });
+    } catch (overrideErr) {
+      logSafeMailError(operation, overrideErr, toEmail);
+      throw overrideErr;
+    }
     if (overrideResult && Array.isArray(overrideResult.rejected) && overrideResult.rejected.length > 0) {
-      throw new Error(`Email provider rejected recipient: ${overrideResult.rejected.join(', ')}`);
+      const rejectErr = new Error(`Email provider rejected recipient: ${overrideResult.rejected.join(', ')}`);
+      rejectErr.code = 'EREJECTED';
+      rejectErr.responseCode = 550;
+      logSafeMailError(operation, rejectErr, toEmail);
+      throw rejectErr;
     }
     if (overrideResult && Array.isArray(overrideResult.accepted) && overrideResult.accepted.length === 0) {
-      throw new Error('Email provider did not accept delivery for recipient.');
+      const emptyErr = new Error('Email provider did not accept delivery for recipient.');
+      emptyErr.code = 'EUNACCEPTED';
+      logSafeMailError(operation, emptyErr, toEmail);
+      throw emptyErr;
     }
-    return overrideResult || { messageId: 'override-msg-id', accepted: [toEmail] };
+    const result = overrideResult || { messageId: 'override-msg-id', accepted: [toEmail] };
+    logSafeMailSuccess(operation, result, toEmail);
+    return result;
   }
 
   if (!isSmtpConfigured()) {
-    console.warn('\x1b[33m%s\x1b[0m', `[Email] Notice: SMTP is not configured with real Gmail credentials. Registration email skipped.`);
-    throw new Error('SMTP email service is not configured. Please set EMAIL_USER and EMAIL_APP_PASSWORD in server/.env.');
+    const configErr = new Error('SMTP email service is not configured. Please set EMAIL_USER and EMAIL_APP_PASSWORD in server/.env.');
+    configErr.code = 'ECONFIG_MISSING';
+    logSafeMailError(operation, configErr, toEmail);
+    throw configErr;
   }
 
   const sanitizedName = escapeHtml(name);
@@ -134,21 +258,35 @@ export const sendRegistrationOtpEmail = async (toEmail, name, otp) => {
     `,
   });
 
-  const info = await transporter.sendMail({
-    from: `"Campus Book Exchange" <${config.smtp.user}>`,
-    to: toEmail,
-    subject: `${otp} is your verification code — Campus Book Exchange`,
-    html,
-  });
+  let info;
+  try {
+    info = await transporter.sendMail({
+      from: `"Campus Book Exchange" <${config.smtp.user}>`,
+      to: toEmail,
+      subject: `${otp} is your verification code — Campus Book Exchange`,
+      html,
+    });
+  } catch (sendErr) {
+    logSafeMailError(operation, sendErr, toEmail);
+    throw sendErr;
+  }
 
   // Verify that the email provider actually accepted the message for delivery
   if (info && Array.isArray(info.rejected) && info.rejected.length > 0) {
-    throw new Error(`Email provider rejected delivery to recipient: ${info.rejected.join(', ')}`);
+    const rejectErr = new Error(`Email provider rejected delivery to recipient: ${info.rejected.join(', ')}`);
+    rejectErr.code = 'EREJECTED';
+    rejectErr.responseCode = 550;
+    logSafeMailError(operation, rejectErr, toEmail);
+    throw rejectErr;
   }
   if (info && Array.isArray(info.accepted) && info.accepted.length === 0) {
-    throw new Error('Email provider did not accept delivery for recipient.');
+    const emptyErr = new Error('Email provider did not accept delivery for recipient.');
+    emptyErr.code = 'EUNACCEPTED';
+    logSafeMailError(operation, emptyErr, toEmail);
+    throw emptyErr;
   }
 
+  logSafeMailSuccess(operation, info, toEmail);
   return { messageId: info.messageId, accepted: info.accepted };
 };
 
@@ -158,20 +296,39 @@ export const sendRegistrationOtpEmail = async (toEmail, name, otp) => {
  * @param {string} otp 
  */
 export const sendPasswordResetOtpEmail = async (toEmail, otp) => {
+  const operation = 'sendPasswordResetOtpEmail';
+
   if (mailSenderOverride) {
-    const overrideResult = await mailSenderOverride({ type: 'reset', to: toEmail, otp });
+    let overrideResult;
+    try {
+      overrideResult = await mailSenderOverride({ type: 'reset', to: toEmail, otp });
+    } catch (overrideErr) {
+      logSafeMailError(operation, overrideErr, toEmail);
+      throw overrideErr;
+    }
     if (overrideResult && Array.isArray(overrideResult.rejected) && overrideResult.rejected.length > 0) {
-      throw new Error(`Email provider rejected recipient: ${overrideResult.rejected.join(', ')}`);
+      const rejectErr = new Error(`Email provider rejected recipient: ${overrideResult.rejected.join(', ')}`);
+      rejectErr.code = 'EREJECTED';
+      rejectErr.responseCode = 550;
+      logSafeMailError(operation, rejectErr, toEmail);
+      throw rejectErr;
     }
     if (overrideResult && Array.isArray(overrideResult.accepted) && overrideResult.accepted.length === 0) {
-      throw new Error('Email provider did not accept delivery for recipient.');
+      const emptyErr = new Error('Email provider did not accept delivery for recipient.');
+      emptyErr.code = 'EUNACCEPTED';
+      logSafeMailError(operation, emptyErr, toEmail);
+      throw emptyErr;
     }
-    return overrideResult || { messageId: 'override-msg-id', accepted: [toEmail] };
+    const result = overrideResult || { messageId: 'override-msg-id', accepted: [toEmail] };
+    logSafeMailSuccess(operation, result, toEmail);
+    return result;
   }
 
   if (!isSmtpConfigured()) {
-    console.warn('\x1b[33m%s\x1b[0m', `[Email] Notice: SMTP is not configured with real Gmail credentials. Password reset email skipped.`);
-    throw new Error('SMTP email service is not configured. Please set EMAIL_USER and EMAIL_APP_PASSWORD in server/.env.');
+    const configErr = new Error('SMTP email service is not configured. Please set EMAIL_USER and EMAIL_APP_PASSWORD in server/.env.');
+    configErr.code = 'ECONFIG_MISSING';
+    logSafeMailError(operation, configErr, toEmail);
+    throw configErr;
   }
 
   const transporter = createTransporter();
@@ -193,20 +350,34 @@ export const sendPasswordResetOtpEmail = async (toEmail, otp) => {
     `,
   });
 
-  const info = await transporter.sendMail({
-    from: `"Campus Book Exchange Security" <${config.smtp.user}>`,
-    to: toEmail,
-    subject: `${otp} is your password reset code — Campus Book Exchange`,
-    html,
-  });
+  let info;
+  try {
+    info = await transporter.sendMail({
+      from: `"Campus Book Exchange Security" <${config.smtp.user}>`,
+      to: toEmail,
+      subject: `${otp} is your password reset code — Campus Book Exchange`,
+      html,
+    });
+  } catch (sendErr) {
+    logSafeMailError(operation, sendErr, toEmail);
+    throw sendErr;
+  }
 
   // Verify that the email provider actually accepted the message for delivery
   if (info && Array.isArray(info.rejected) && info.rejected.length > 0) {
-    throw new Error(`Email provider rejected delivery to recipient: ${info.rejected.join(', ')}`);
+    const rejectErr = new Error(`Email provider rejected delivery to recipient: ${info.rejected.join(', ')}`);
+    rejectErr.code = 'EREJECTED';
+    rejectErr.responseCode = 550;
+    logSafeMailError(operation, rejectErr, toEmail);
+    throw rejectErr;
   }
   if (info && Array.isArray(info.accepted) && info.accepted.length === 0) {
-    throw new Error('Email provider did not accept delivery for recipient.');
+    const emptyErr = new Error('Email provider did not accept delivery for recipient.');
+    emptyErr.code = 'EUNACCEPTED';
+    logSafeMailError(operation, emptyErr, toEmail);
+    throw emptyErr;
   }
 
+  logSafeMailSuccess(operation, info, toEmail);
   return { messageId: info.messageId, accepted: info.accepted };
 };

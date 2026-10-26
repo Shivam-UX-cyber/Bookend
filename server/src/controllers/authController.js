@@ -12,7 +12,11 @@ import {
   hashFlowToken,
   verifyAuthToken,
 } from '../services/tokenService.js';
-import { sendRegistrationOtpEmail, sendPasswordResetOtpEmail } from '../services/mailService.js';
+import {
+  sendRegistrationOtpEmail,
+  sendPasswordResetOtpEmail,
+  logSafeMailError,
+} from '../services/mailService.js';
 import { config } from '../config/env.js';
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
@@ -146,6 +150,7 @@ export const register = async (req, res) => {
         { $set: { status: 'active' } }
       );
     } catch (mailError) {
+      logSafeMailError('register', mailError, email);
       // Safe concurrency check: only roll back if a newer OTP has NOT been issued concurrently!
       await PendingRegistration.deleteOne({ email, otpVersion: 1, flowTokenHash });
       res.clearCookie('regSession', getClearCookieOptions());
@@ -458,6 +463,7 @@ export const resendRegistrationOtp = async (req, res) => {
         { $set: { status: 'active' } }
       );
     } catch (mailError) {
+      logSafeMailError('resendRegistrationOtp', mailError, updated.email);
       // Concurrency safe rollback: only revert if otpVersion hasn't changed
       await PendingRegistration.updateOne(
         { flowTokenHash, otpVersion: currentVersion },
@@ -765,6 +771,7 @@ export const forgotPassword = async (req, res) => {
         { $set: { status: 'active' } }
       );
     } catch (mailError) {
+      logSafeMailError('forgotPassword', mailError, email);
       // Do NOT delete the record: keep delivery_failed state and reset cooldown so student can retry resending immediately
       await PasswordReset.updateOne(
         { email, flowTokenHash, otpVersion: 1 },
@@ -777,7 +784,7 @@ export const forgotPassword = async (req, res) => {
       );
       return res.status(200).json({
         success: false,
-        message: 'Failed to dispatch verification email. Please try again.',
+        message: 'Failed to dispatch reset email. Please try again.',
         cooldownSeconds: 0,
         deliveryFailed: true,
       });
@@ -1118,6 +1125,7 @@ export const resendResetOtp = async (req, res) => {
         { $set: { status: 'active' } }
       );
     } catch (mailError) {
+      logSafeMailError('resendResetOtp', mailError, updated.email);
       await PasswordReset.updateOne(
         { flowTokenHash, otpVersion: currentVersion },
         {

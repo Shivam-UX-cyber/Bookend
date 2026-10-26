@@ -28,8 +28,14 @@ export const config = {
     secure: process.env.SMTP_SECURE !== undefined
       ? process.env.SMTP_SECURE === 'true'
       : (parseInt(process.env.SMTP_PORT, 10) || 465) === 465,
-    user: (process.env.EMAIL_USER || '').trim(),
-    appPassword: (process.env.EMAIL_APP_PASSWORD || '').replace(/\s+/g, '').trim(),
+    user: (process.env.EMAIL_USER || process.env.SMTP_USER || '').trim(),
+    appPassword: (
+      process.env.EMAIL_APP_PASSWORD ||
+      process.env.EMAIL_PASS ||
+      process.env.SMTP_PASS ||
+      process.env.SMTP_PASSWORD ||
+      ''
+    ).replace(/\s+/g, '').trim(),
   },
 };
 
@@ -82,7 +88,12 @@ export const validateEnv = () => {
   }
 
   if (!config.smtp.user || !config.smtp.appPassword) {
-    warnings.push('Gmail SMTP credentials (EMAIL_USER / EMAIL_APP_PASSWORD) are not configured. Emails will fail to send until set in .env.');
+    warnings.push('SMTP credentials (EMAIL_USER / EMAIL_APP_PASSWORD / EMAIL_PASS) are not configured. Emails will fail to send until set in environment.');
+  } else if (
+    config.smtp.user.includes('your-verified-account') ||
+    config.smtp.appPassword.includes('your-16-char')
+  ) {
+    warnings.push('SMTP credentials in environment are using placeholder values (your-verified-account / your-16-char). Real credentials are required for OTP delivery.');
   }
 
   return warnings;

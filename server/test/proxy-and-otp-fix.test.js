@@ -11,6 +11,10 @@ import {
   setMailSenderOverride,
   sendRegistrationOtpEmail,
   sendPasswordResetOtpEmail,
+  maskEmail,
+  sanitizeProviderErrorDetails,
+  extractMailDiagnostics,
+  logSafeMailError,
 } from '../src/services/mailService.js';
 import { User } from '../src/models/User.js';
 import { PendingRegistration } from '../src/models/PendingRegistration.js';
@@ -206,27 +210,93 @@ async function runTests() {
     console.log('   ✓ sendRegistrationOtpEmail throws error when provider rejects recipient.');
 
     // =========================================================================
-    // TEST 8: sendPasswordResetOtpEmail Provider Empty Acceptance Handling
+    // TEST 8: sendPasswordResetOtpEmail SMTP Connection Failure (ETIMEDOUT / ECONNREFUSED)
     // =========================================================================
-    console.log('▶ [8/11] Testing sendPasswordResetOtpEmail Provider Empty Acceptance...');
-    setMailSenderOverride(async () => ({
-      messageId: '<msg-unaccepted@gmail.com>',
+    console.log('▶ [8/17] Testing sendPasswordResetOtpEmail SMTP Connection Failure (ETIMEDOUT)...');
+    const connErr = new Error('connect ETIMEDOUT 142.250.185.108:465');
+    connErr.code = 'ETIMEDOUT';
+    connErr.command = 'CONN';
+    connErr.syscall = 'connect';
+    setMailSenderOverride(async () => {
+      throw connErr;
+    });
+
+    await assert.rejects(
+      async () => {
+        await sendPasswordResetOtpEmail('conn.timeout@gmail.com', '123456');
+      },
+      (err) => {
+        assert.strictEqual(err.code, 'ETIMEDOUT');
+        return true;
+      }
+    );
+    console.log('   ✓ Connection failure cleanly propagated with ETIMEDOUT code.');
+
+    // =========================================================================
+    // TEST 9: sendPasswordResetOtpEmail SMTP Auth Failure (EAUTH / 535)
+    // =========================================================================
+    console.log('▶ [9/17] Testing sendPasswordResetOtpEmail SMTP Auth Failure (EAUTH / 535)...');
+    const authErr = new Error('Invalid login: 535-5.7.8 Username and Password not accepted');
+    authErr.code = 'EAUTH';
+    authErr.responseCode = 535;
+    authErr.command = 'AUTH PLAIN';
+    setMailSenderOverride(async () => {
+      throw authErr;
+    });
+
+    await assert.rejects(
+      async () => {
+        await sendPasswordResetOtpEmail('auth.fail@gmail.com', '654321');
+      },
+      (err) => {
+        assert.strictEqual(err.code, 'EAUTH');
+        assert.strictEqual(err.responseCode, 535);
+        return true;
+      }
+    );
+    console.log('   ✓ Auth failure cleanly propagated with EAUTH code and 535 responseCode.');
+
+    // =========================================================================
+    // TEST 10: sendPasswordResetOtpEmail Recipient Rejection (EREJECTED / 550)
+    // =========================================================================
+    console.log('▶ [10/17] Testing sendPasswordResetOtpEmail Recipient Rejection (EREJECTED / 550)...');
+    setMailSenderOverride(async (data) => ({
+      messageId: '<msg-rej@gmail.com>',
       accepted: [],
-      rejected: [],
+      rejected: [data.to],
     }));
 
     await assert.rejects(
       async () => {
-        await sendPasswordResetOtpEmail('unaccepted@gmail.com', '778899');
+        await sendPasswordResetOtpEmail('nonexistent.mailbox@gmail.com', '998877');
       },
-      /Email provider did not accept delivery/
+      (err) => {
+        assert.strictEqual(err.code, 'EREJECTED');
+        assert.strictEqual(err.responseCode, 550);
+        return true;
+      }
     );
-    console.log('   ✓ sendPasswordResetOtpEmail throws error when provider does not accept message.');
+    console.log('   ✓ Recipient rejection throws EREJECTED with responseCode 550.');
 
     // =========================================================================
-    // TEST 9: Register Controller Returns 503 on Provider Transport Failure
+    // TEST 11: sendPasswordResetOtpEmail Provider Acceptance (250 OK)
     // =========================================================================
-    console.log('▶ [9/11] Testing Register Controller Safe Failure on Provider Failure...');
+    console.log('▶ [11/17] Testing sendPasswordResetOtpEmail Provider Acceptance (250 OK)...');
+    setMailSenderOverride(async (data) => ({
+      messageId: '<msg-accepted-reset@gmail.com>',
+      accepted: [data.to],
+      rejected: [],
+    }));
+
+    const acceptedReceipt = await sendPasswordResetOtpEmail('happy.path@gmail.com', '112233');
+    assert.strictEqual(acceptedReceipt.messageId, '<msg-accepted-reset@gmail.com>');
+    assert.deepStrictEqual(acceptedReceipt.accepted, ['happy.path@gmail.com']);
+    console.log('   ✓ Provider acceptance successfully returns accepted receipt.');
+
+    // =========================================================================
+    // TEST 12: Register Controller Returns 503 on Provider Transport Failure
+    // =========================================================================
+    console.log('▶ [12/17] Testing Register Controller Safe Failure on Provider Failure...');
     setMailSenderOverride(async () => {
       throw new Error('SMTP connection timeout ETIMEDOUT');
     });
@@ -253,9 +323,9 @@ async function runTests() {
     console.log('   ✓ Register returns 503 success: false on provider failure and cleans up pending state.');
 
     // =========================================================================
-    // TEST 10: forgotPassword Returns success: false with deliveryFailed: true on Provider Failure
+    // TEST 13: forgotPassword Returns success: false with deliveryFailed: true on Provider Failure
     // =========================================================================
-    console.log('▶ [10/11] Testing Forgot Password Delivery Failure Response State...');
+    console.log('▶ [13/17] Testing Forgot Password Delivery Failure Response State...');
     const recoveryEmail = 'real.user.recovery@gmail.com';
     await User.deleteMany({ email: recoveryEmail });
     await PasswordReset.deleteMany({ email: recoveryEmail });
@@ -286,9 +356,9 @@ async function runTests() {
     console.log('   ✓ Forgot password returns success: false with deliveryFailed: true without revealing user existence.');
 
     // =========================================================================
-    // TEST 11: Resend Registration OTP Returns 503 on Provider Failure
+    // TEST 14: Resend Registration OTP Returns 503 on Provider Failure
     // =========================================================================
-    console.log('▶ [11/11] Testing Resend Registration OTP Provider Failure Handling...');
+    console.log('▶ [14/17] Testing Resend Registration OTP Provider Failure Handling...');
     const resendEmail = 'resend.fail.student@gmail.com';
     await PendingRegistration.deleteMany({ email: resendEmail });
 
@@ -327,7 +397,135 @@ async function runTests() {
     assert.strictEqual(pendingDoc.status, 'delivery_failed');
     console.log('   ✓ Resend returns 503 success: false on failure and marks record for zero-cooldown retry.');
 
-    console.log('\n🎉 ALL 11 PROXY TRUST & OTP DELIVERY TESTS PASSED!\n');
+    // =========================================================================
+    // TEST 15: Resend Reset OTP Returns 503 & delivery_failed on Provider Failure
+    // =========================================================================
+    console.log('▶ [15/17] Testing Resend Reset OTP Returns 503 & delivery_failed on Provider Failure...');
+    const resetUserEmail = 'resend.reset.user@gmail.com';
+    await User.deleteMany({ email: resetUserEmail });
+    await PasswordReset.deleteMany({ email: resetUserEmail });
+
+    await User.create({
+      name: 'Reset User',
+      email: resetUserEmail,
+      password: 'HashedPassword123!',
+      isVerified: true,
+    });
+
+    // Step 1: Successful forgot-password request to initialize active flow
+    setMailSenderOverride(async (data) => ({
+      messageId: '<msg-forgot-ok@gmail.com>',
+      accepted: [data.to],
+      rejected: [],
+    }));
+
+    const forgotRes = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: resetUserEmail });
+
+    assert.strictEqual(forgotRes.status, 200);
+    const resetCookie = forgotRes.headers['set-cookie'].find((c) => c.startsWith('resetSession='));
+    assert.ok(resetCookie, 'Must set resetSession cookie');
+
+    // Advance cooldown
+    await PasswordReset.updateOne(
+      { email: resetUserEmail },
+      { $set: { resendAvailableAt: new Date(Date.now() - 1000) } }
+    );
+
+    // Simulate provider failure on resend
+    setMailSenderOverride(async () => {
+      const err = new Error('SMTP connection failure ETIMEDOUT');
+      err.code = 'ETIMEDOUT';
+      throw err;
+    });
+
+    const resendResetRes = await request(app)
+      .post('/api/auth/resend-reset-otp')
+      .set('Cookie', [resetCookie]);
+
+    assert.strictEqual(resendResetRes.status, 503, 'Must return HTTP 503 on mail delivery failure');
+    assert.strictEqual(resendResetRes.body.success, false);
+    assert.strictEqual(resendResetRes.body.message, 'Failed to dispatch reset email. Please try again.');
+
+    const resetDocAfterFail = await PasswordReset.findOne({ email: resetUserEmail });
+    assert.strictEqual(resetDocAfterFail.status, 'delivery_failed');
+    assert.ok(resetDocAfterFail.resendAvailableAt <= new Date(), 'Cooldown must be reset to allow immediate retry');
+    console.log('   ✓ Resend Reset OTP returns HTTP 503 and transitions status to delivery_failed.');
+
+    // =========================================================================
+    // TEST 16: Safe Diagnostic Error Extraction & Strict Secret Redaction
+    // =========================================================================
+    console.log('▶ [16/17] Testing Safe Diagnostic Extraction & Strict Secret Redaction...');
+    // 16a. Masking email
+    assert.strictEqual(maskEmail('shivamkumar785707@gmail.com'), 's***7@gmail.com');
+    assert.strictEqual(maskEmail('alice@test.com'), 'a***e@test.com');
+    assert.strictEqual(maskEmail('me@domain.org'), 'm***@domain.org');
+    assert.strictEqual(maskEmail('invalid-email'), '***');
+
+    // 16b. Redaction of OTP codes (6 digits)
+    const rawOtpError = 'Failed to deliver OTP 839201 to inbox';
+    const sanitizedOtpError = sanitizeProviderErrorDetails(rawOtpError);
+    assert.ok(!sanitizedOtpError.includes('839201'), 'Must not contain raw 6-digit OTP');
+    assert.ok(sanitizedOtpError.includes('[REDACTED_OTP]'));
+
+    // 16c. Redaction of 16-character App Passwords
+    const rawPassError = 'Invalid app password vtywbqsbzklymaeb rejected';
+    const sanitizedPassError = sanitizeProviderErrorDetails(rawPassError);
+    assert.ok(!sanitizedPassError.includes('vtywbqsbzklymaeb'), 'Must not contain 16-char app password');
+    assert.ok(sanitizedPassError.includes('[REDACTED_APP_PASSWORD]'));
+
+    // 16d. Redaction of tokens and credentials
+    const rawTokenError = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzfQ password: SuperSecretPassword123';
+    const sanitizedTokenError = sanitizeProviderErrorDetails(rawTokenError);
+    assert.ok(!sanitizedTokenError.includes('SuperSecretPassword123'));
+    assert.ok(!sanitizedTokenError.includes('eyJhbGciOiJIUzI1Ni'));
+    assert.ok(sanitizedTokenError.includes('Bearer [REDACTED_TOKEN]'));
+
+    // 16e. extractMailDiagnostics safe structure
+    const sampleErr = new Error('535-5.7.8 Username and Password not accepted with OTP 719283');
+    sampleErr.code = 'EAUTH';
+    sampleErr.responseCode = 535;
+    sampleErr.command = 'AUTH PLAIN';
+    const diag = extractMailDiagnostics('resendResetOtp', sampleErr, 'student.test@gmail.com');
+    assert.strictEqual(diag.operation, 'resendResetOtp');
+    assert.strictEqual(diag.errorCode, 'EAUTH');
+    assert.strictEqual(diag.responseCode, 535);
+    assert.strictEqual(diag.command, 'AUTH PLAIN');
+    assert.strictEqual(diag.recipient, 's***t@gmail.com');
+    assert.ok(!diag.details.includes('719283'), 'Diagnostics must redact OTP');
+    assert.ok(diag.details.includes('[REDACTED_OTP]'));
+    assert.strictEqual(typeof diag.timestamp, 'string');
+    console.log('   ✓ Diagnostic extraction redacts OTPs, passwords, and tokens, while safely exposing error codes.');
+
+    // =========================================================================
+    // TEST 17: Account-Enumeration Protection Preserved on Forgot Password
+    // =========================================================================
+    console.log('▶ [17/17] Testing Account Enumeration Protection on Forgot Password...');
+    const nonExistentEmail = 'nonexistent.student.ghost@gmail.com';
+    await User.deleteMany({ email: nonExistentEmail });
+    await PasswordReset.deleteMany({ email: nonExistentEmail });
+
+    // Even if mail sender throws, an unregistered user receives identical 200 response
+    setMailSenderOverride(async () => {
+      throw new Error('SMTP should never be invoked for non-existent account');
+    });
+
+    const ghostRes = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: nonExistentEmail });
+
+    assert.strictEqual(ghostRes.status, 200);
+    assert.strictEqual(ghostRes.body.success, true);
+    assert.strictEqual(ghostRes.body.cooldownSeconds, 60);
+    assert.ok(ghostRes.body.message.includes('If an account exists'));
+
+    const ghostDoc = await PasswordReset.findOne({ email: nonExistentEmail });
+    assert.ok(ghostDoc);
+    assert.strictEqual(ghostDoc.isAnonymous, true);
+    console.log('   ✓ Forgot password preserves timing & account-enumeration protections for unregistered emails.');
+
+    console.log('\n🎉 ALL 17 PROXY TRUST, OTP DELIVERY & DIAGNOSTIC TESTS PASSED!\n');
   } finally {
     await cleanup();
   }
