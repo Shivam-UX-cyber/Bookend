@@ -14,6 +14,7 @@ import {
   resetPassword,
   cancelForgotPassword,
   cancelRegistration,
+  diagnosticSmtp,
 } from '../controllers/authController.js';
 import {
   validateRegistration,
@@ -24,7 +25,7 @@ import {
   validateResetPassword,
 } from '../middleware/validationMiddleware.js';
 import { requireAuth } from '../middleware/authMiddleware.js';
-import { authLimiter, otpLimiter } from '../middleware/rateLimiter.js';
+import { authLimiter, otpLimiter, diagnosticLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -47,5 +48,8 @@ router.post('/verify-reset-otp', otpLimiter, validateOtpVerification, verifyRese
 router.post('/resend-reset-otp', otpLimiter, validateResendOtp, resendResetOtp);
 router.post('/forgot-password/cancel', cancelForgotPassword);
 router.post('/reset-password', authLimiter, validateResetPassword, resetPassword);
+
+// Protected Diagnostic Endpoint (Requires DIAGNOSTIC_KEY in server environment; disabled by default)
+router.get('/diagnostic/smtp', diagnosticLimiter, diagnosticSmtp);
 
 export default router;

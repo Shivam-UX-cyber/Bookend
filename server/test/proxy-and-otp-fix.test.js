@@ -618,9 +618,82 @@ async function runTests() {
     const ghostDoc = await PasswordReset.findOne({ email: nonExistentEmail });
     assert.ok(ghostDoc);
     assert.strictEqual(ghostDoc.isAnonymous, true);
-    console.log('   ✓ Forgot password preserves timing & account-enumeration protections for unregistered emails.');
+    // =========================================================================
+    // TEST 18: Protected Remote Diagnostic Endpoint (/api/auth/diagnostic/smtp)
+    // =========================================================================
+    console.log('▶ [18/18] Testing Protected Remote Diagnostic Endpoint Security & Verification...');
 
-    console.log('\n🎉 ALL 17 PROXY TRUST, OTP DELIVERY & DIAGNOSTIC TESTS PASSED!\n');
+    const origDiagKey = process.env.DIAGNOSTIC_KEY;
+    try {
+      // 18a. Disabled by default when DIAGNOSTIC_KEY is not configured (returns 404)
+      delete process.env.DIAGNOSTIC_KEY;
+      delete process.env.SMTP_DIAGNOSTIC_SECRET;
+      const disabledRes = await request(app).get('/api/auth/diagnostic/smtp');
+      assert.strictEqual(disabledRes.status, 404, 'Must return 404 when diagnostic endpoint is not enabled in environment');
+      assert.strictEqual(disabledRes.body.success, false);
+
+      // 18b. When enabled, requests without key receive 403
+      const testSecretKey = 'test_diagnostic_secret_key_32_characters_ok!';
+      process.env.DIAGNOSTIC_KEY = testSecretKey;
+
+      const unauthRes = await request(app).get('/api/auth/diagnostic/smtp');
+      assert.strictEqual(unauthRes.status, 403, 'Must reject requests missing x-diagnostic-key header');
+      assert.strictEqual(unauthRes.body.success, false);
+
+      // 18c. Requests with invalid key receive 403
+      const wrongKeyRes = await request(app)
+        .get('/api/auth/diagnostic/smtp')
+        .set('x-diagnostic-key', 'wrong_diagnostic_key_32_characters_invalid!');
+      assert.strictEqual(wrongKeyRes.status, 403, 'Must reject invalid authorization key');
+
+      // 18d. Valid key with successful connectivity returns 200 and safe diagnostics
+      setMailSenderOverride(async (data) => {
+        if (data.type === 'verify') return { ok: true };
+      });
+
+      const validDiagRes = await request(app)
+        .get('/api/auth/diagnostic/smtp')
+        .set('x-diagnostic-key', testSecretKey);
+
+      assert.strictEqual(validDiagRes.status, 200);
+      assert.strictEqual(validDiagRes.body.success, true);
+      assert.strictEqual(validDiagRes.body.smtpHost, 'smtp.gmail.com');
+      assert.strictEqual(validDiagRes.body.smtpPort, 465);
+      assert.strictEqual(validDiagRes.body.smtpFamily, 4);
+      assert.strictEqual(validDiagRes.body.authConfigured, true);
+      assert.strictEqual(validDiagRes.body.password, undefined, 'Must NEVER leak credentials');
+      assert.strictEqual(validDiagRes.body.appPassword, undefined, 'Must NEVER leak app passwords');
+
+      // 18e. Valid key with connection failure returns 503 with failureStage
+      setMailSenderOverride(async (data) => {
+        if (data.type === 'verify') {
+          const timeoutErr = new Error('Connection timeout');
+          timeoutErr.code = 'ETIMEDOUT';
+          timeoutErr.command = 'CONN';
+          return { error: timeoutErr };
+        }
+      });
+
+      const failDiagRes = await request(app)
+        .get('/api/auth/diagnostic/smtp')
+        .set('x-diagnostic-key', testSecretKey);
+
+      assert.strictEqual(failDiagRes.status, 503);
+      assert.strictEqual(failDiagRes.body.success, false);
+      assert.strictEqual(failDiagRes.body.failureStage, 'TCP_CONNECTION');
+      assert.strictEqual(failDiagRes.body.errorCode, 'ETIMEDOUT');
+      assert.ok(failDiagRes.body.details.includes('Connection timeout'));
+      setMailSenderOverride(null);
+    } finally {
+      if (origDiagKey !== undefined) {
+        process.env.DIAGNOSTIC_KEY = origDiagKey;
+      } else {
+        delete process.env.DIAGNOSTIC_KEY;
+      }
+    }
+    console.log('   ✓ Remote diagnostic endpoint strictly protected by secret key, never leaks credentials, and reports stages accurately.');
+
+    console.log('\n🎉 ALL 18 PROXY TRUST, OTP DELIVERY & DIAGNOSTIC TESTS PASSED!\n');
   } finally {
     await cleanup();
   }

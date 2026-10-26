@@ -66,3 +66,24 @@ export const otpLimiter = rateLimit({
     message: 'Too many OTP requests from this IP. Please try again after 15 minutes.',
   },
 });
+
+/**
+ * Strict limiter for protected diagnostic endpoints
+ */
+export const diagnosticLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // maximum 10 diagnostic requests per 15 minutes per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: {
+    xForwardedForHeader: false,
+  },
+  skip: (req) => {
+    if (req.headers['x-test-rate-limit'] === 'true') return false;
+    return process.env.NODE_ENV === 'test';
+  },
+  message: {
+    success: false,
+    message: 'Too many diagnostic requests from this IP. Please try again after 15 minutes.',
+  },
+});

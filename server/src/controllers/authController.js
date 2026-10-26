@@ -16,6 +16,7 @@ import {
   sendRegistrationOtpEmail,
   sendPasswordResetOtpEmail,
   logSafeMailError,
+  verifySmtpConnection,
 } from '../services/mailService.js';
 import { config } from '../config/env.js';
 
@@ -1283,5 +1284,53 @@ export const cancelRegistration = async (req, res) => {
       message: 'Registration flow has been cancelled.',
     });
   }
+};
+
+/**
+ * 15. Protected Diagnostic Endpoint for SMTP Connectivity
+ * Strictly authenticated via DIAGNOSTIC_KEY / SMTP_DIAGNOSTIC_SECRET environment variable.
+ * Disabled by default (returns 404). Does not send emails, leak secrets, or accept arbitrary inputs.
+ */
+export const diagnosticSmtp = async (req, res) => {
+  const serverKey = process.env.DIAGNOSTIC_KEY || process.env.SMTP_DIAGNOSTIC_SECRET;
+  if (!serverKey || typeof serverKey !== 'string' || serverKey.length < 16) {
+    return res.status(404).json({
+      success: false,
+      message: 'Diagnostic endpoint is not enabled.',
+    });
+  }
+
+  const clientKey = req.headers['x-diagnostic-key'] || req.query.key;
+  if (!clientKey || typeof clientKey !== 'string') {
+    return res.status(403).json({
+      success: false,
+      message: 'Forbidden: Missing diagnostic authorization key.',
+    });
+  }
+
+  const serverBuf = Buffer.from(serverKey);
+  const clientBuf = Buffer.from(clientKey);
+  if (serverBuf.length !== clientBuf.length || !crypto.timingSafeEqual(serverBuf, clientBuf)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Forbidden: Invalid diagnostic authorization key.',
+    });
+  }
+
+  const result = await verifySmtpConnection();
+
+  return res.status(result.success ? 200 : 503).json({
+    success: result.success,
+    failureStage: result.failureStage,
+    errorCode: result.errorCode || null,
+    details: result.details,
+    smtpHost: config.smtp.host,
+    smtpPort: config.smtp.port,
+    smtpSecure: config.smtp.secure,
+    smtpRequireTLS: config.smtp.requireTLS,
+    smtpFamily: config.smtp.family,
+    authConfigured: Boolean(config.smtp.user && config.smtp.appPassword),
+    timestamp: new Date().toISOString(),
+  });
 };
 
