@@ -16,7 +16,9 @@ import {
   sendRegistrationOtpEmail,
   sendPasswordResetOtpEmail,
   logSafeMailError,
+  verifyEmailConnection,
   verifySmtpConnection,
+  isEmailConfigured,
 } from '../services/mailService.js';
 import { config } from '../config/env.js';
 
@@ -1317,20 +1319,23 @@ export const diagnosticSmtp = async (req, res) => {
     });
   }
 
-  const result = await verifySmtpConnection();
+  const result = await verifyEmailConnection();
 
   return res.status(result.success ? 200 : 503).json({
     success: result.success,
     failureStage: result.failureStage,
     errorCode: result.errorCode || null,
     details: result.details,
-    smtpHost: config.smtp.host,
-    smtpPort: config.smtp.port,
-    smtpSecure: config.smtp.secure,
-    smtpRequireTLS: config.smtp.requireTLS,
-    smtpFamily: config.smtp.family,
-    authConfigured: Boolean(config.smtp.user && config.smtp.appPassword),
+    provider: 'resend',
+    deliveryType: 'https',
+    from: config.email?.from || 'Campus Book Exchange <onboarding@resend.dev>',
+    authConfigured: isEmailConfigured(),
+    apiHost: 'api.resend.com',
+    smtpHost: 'api.resend.com',
+    smtpPort: 443,
     timestamp: new Date().toISOString(),
   });
 };
+
+export const diagnosticEmail = diagnosticSmtp;
 

@@ -49,7 +49,8 @@ router.post('/resend-reset-otp', otpLimiter, validateResendOtp, resendResetOtp);
 router.post('/forgot-password/cancel', cancelForgotPassword);
 router.post('/reset-password', authLimiter, validateResetPassword, resetPassword);
 
-// Protected Diagnostic Endpoint (Requires DIAGNOSTIC_KEY in server environment; disabled by default)
+// Protected Diagnostic Endpoints (Requires DIAGNOSTIC_KEY in server environment; disabled by default)
 router.get('/diagnostic/smtp', diagnosticLimiter, diagnosticSmtp);
+router.get('/diagnostic/email', diagnosticLimiter, diagnosticSmtp);
 
 export default router;

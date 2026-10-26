@@ -16,8 +16,9 @@ import {
   extractMailDiagnostics,
   logSafeMailError,
   classifyMailErrorStage,
-  getTransporterOptions,
+  verifyEmailConnection,
   verifySmtpConnection,
+  isEmailConfigured,
 } from '../src/services/mailService.js';
 import { validateEnv } from '../src/config/env.js';
 import { User } from '../src/models/User.js';
@@ -165,106 +166,77 @@ async function runTests() {
     console.log('   ✓ Rate limits enforced per client IP; other IPs unaffected.');
 
     // =========================================================================
-    // TEST 5: SMTP Port 465 (SMTPS) vs Port 587 (STARTTLS) Configuration & Validation
+    // TEST 5: Resend HTTPS Email API Configuration & Error Classification
     // =========================================================================
-    console.log('▶ [5/17] Testing SMTP Port 465 (SMTPS) vs Port 587 (STARTTLS) Configuration...');
+    console.log('▶ [5/17] Testing Resend HTTPS Email API Configuration & Error Classification...');
 
-    const origPort = config.smtp.port;
-    const origSecure = config.smtp.secure;
-    const origRequireTLS = config.smtp.requireTLS;
+    const origApiKey = config.email.resendApiKey;
+    const origFrom = config.email.from;
 
     try {
-      // 5a. Port 465 (Implicit TLS) Options Evaluation
-      config.smtp.port = 465;
-      config.smtp.secure = true;
-      config.smtp.requireTLS = false;
-      const opts465 = getTransporterOptions();
-      assert.strictEqual(opts465.port, 465);
-      assert.strictEqual(opts465.secure, true, 'Port 465 must use implicit TLS (secure: true)');
-      assert.strictEqual(opts465.requireTLS, false, 'Port 465 already starts in TLS');
-      assert.strictEqual(opts465.family, 4, 'Must default to IPv4 to prevent container IPv6 blackholes');
-      assert.strictEqual(opts465.tls.minVersion, 'TLSv1.2');
-      assert.strictEqual(opts465.tls.rejectUnauthorized, true);
+      // 5a. Default Resend configuration evaluation
+      assert.strictEqual(config.email.provider, 'resend');
+      assert.ok(config.email.from.includes('Campus Book Exchange'));
 
-      // 5b. Port 587 (STARTTLS) Options Evaluation
-      config.smtp.port = 587;
-      config.smtp.secure = false;
-      config.smtp.requireTLS = true;
-      const opts587 = getTransporterOptions();
-      assert.strictEqual(opts587.port, 587);
-      assert.strictEqual(opts587.secure, false, 'Port 587 must start plaintext (secure: false)');
-      assert.strictEqual(opts587.requireTLS, true, 'Port 587 MUST require STARTTLS to prevent credential exposure');
-      assert.strictEqual(opts587.family, 4);
-      assert.strictEqual(opts587.tls.minVersion, 'TLSv1.2');
-      assert.strictEqual(opts587.tls.rejectUnauthorized, true);
+      // 5b. Resend permitted testing sender vs custom domain
+      config.email.from = 'Campus Book Exchange <onboarding@resend.dev>';
+      assert.ok(config.email.from.includes('onboarding@resend.dev'), 'Must support Resend permitted testing sender');
 
-      // 5c. Whitespace stripping for Google App Password
-      const sanitizePassword = (pass) => (pass || '').replace(/\s+/g, '').trim();
-      assert.strictEqual(sanitizePassword('abcd efgh ijkl mnop'), 'abcdefghijklmnop');
+      config.email.from = 'Campus Book Exchange <no-reply@bookend.campus>';
+      assert.strictEqual(config.email.from, 'Campus Book Exchange <no-reply@bookend.campus>');
 
-      // 5d. validateEnv warnings for misconfigured port/TLS combinations
-      config.smtp.port = 587;
-      config.smtp.secure = true; // Inconsistent!
-      const warnings587 = validateEnv();
-      assert.ok(warnings587.some((w) => w.includes('Port 587 uses STARTTLS')), 'Must warn on secure: true with port 587');
+      // 5c. validateEnv warnings for missing or placeholder RESEND_API_KEY
+      config.email.resendApiKey = '';
+      const warningsMissing = validateEnv();
+      assert.ok(warningsMissing.some((w) => w.includes('RESEND_API_KEY) is not configured')), 'Must warn when RESEND_API_KEY is missing');
 
-      config.smtp.port = 465;
-      config.smtp.secure = false; // Inconsistent!
-      const warnings465 = validateEnv();
-      assert.ok(warnings465.some((w) => w.includes('Port 465 uses SMTPS')), 'Must warn on secure: false with port 465');
+      config.email.resendApiKey = 're_your_api_key_placeholder';
+      const warningsPlaceholder = validateEnv();
+      assert.ok(warningsPlaceholder.some((w) => w.includes('using a placeholder value')), 'Must warn on placeholder key');
 
-      config.smtp.port = 25;
-      config.smtp.secure = false;
-      const warnings25 = validateEnv();
-      assert.ok(warnings25.some((w) => w.includes('port 25 is configured')), 'Must warn on blocked port 25');
+      // 5d. classifyMailErrorStage isolates NETWORK_FAILURE, API_AUTHENTICATION, RECIPIENT_RESTRICTION
+      const netErr = new Error('fetch failed: connect ETIMEDOUT api.resend.com:443');
+      netErr.code = 'ETIMEDOUT';
+      assert.strictEqual(classifyMailErrorStage(netErr), 'NETWORK_FAILURE');
 
-      // 5e. classifyMailErrorStage isolates TCP_CONNECTION from SMTP_AUTHENTICATION
-      const tcpTimeoutErr = new Error('Connection timeout');
-      tcpTimeoutErr.code = 'ETIMEDOUT';
-      tcpTimeoutErr.command = 'CONN';
-      assert.strictEqual(classifyMailErrorStage(tcpTimeoutErr), 'TCP_CONNECTION');
-      assert.notStrictEqual(classifyMailErrorStage(tcpTimeoutErr), 'SMTP_AUTHENTICATION', 'ETIMEDOUT must NOT be classified as auth failure');
+      const authErr = new Error('API key is invalid');
+      authErr.statusCode = 401;
+      assert.strictEqual(classifyMailErrorStage(authErr), 'API_AUTHENTICATION');
 
-      const refusedErr = new Error('connect ECONNREFUSED 127.0.0.1:465');
-      refusedErr.code = 'ECONNREFUSED';
-      assert.strictEqual(classifyMailErrorStage(refusedErr), 'TCP_CONNECTION');
+      const restrictErr = new Error('You can only send testing emails to your own email address');
+      restrictErr.statusCode = 403;
+      assert.strictEqual(classifyMailErrorStage(restrictErr), 'RECIPIENT_RESTRICTION');
 
-      const tlsErr = new Error('SSL alert handshake failure');
-      tlsErr.code = 'ETLS';
-      assert.strictEqual(classifyMailErrorStage(tlsErr), 'TLS_NEGOTIATION');
+      const rateErr = new Error('Too many requests');
+      rateErr.statusCode = 429;
+      assert.strictEqual(classifyMailErrorStage(rateErr), 'PROVIDER_RATE_LIMIT');
 
-      const authErr = new Error('Invalid login: 535 5.7.8 Username and Password not accepted');
-      authErr.code = 'EAUTH';
-      authErr.responseCode = 535;
-      assert.strictEqual(classifyMailErrorStage(authErr), 'SMTP_AUTHENTICATION');
-
-      // 5f. verifySmtpConnection test with mock
+      // 5e. verifyEmailConnection test with mock
       setMailSenderOverride(async (data) => {
         if (data.type === 'verify') return { ok: true };
       });
-      const verifyRes = await verifySmtpConnection();
+      const verifyRes = await verifyEmailConnection();
       assert.strictEqual(verifyRes.success, true);
+      assert.strictEqual(verifyRes.provider, 'resend');
 
-      // 5g. verifySmtpConnection test with connection failure
+      // 5f. verifyEmailConnection test with connection failure
       setMailSenderOverride(async (data) => {
         if (data.type === 'verify') {
-          const timeoutErr = new Error('Connection timeout');
+          const timeoutErr = new Error('fetch failed');
           timeoutErr.code = 'ETIMEDOUT';
-          timeoutErr.command = 'CONN';
           return { error: timeoutErr };
         }
       });
-      const verifyFailRes = await verifySmtpConnection();
+      const verifyFailRes = await verifyEmailConnection();
       assert.strictEqual(verifyFailRes.success, false);
-      assert.strictEqual(verifyFailRes.failureStage, 'TCP_CONNECTION');
+      assert.strictEqual(verifyFailRes.failureStage, 'NETWORK_FAILURE');
       assert.strictEqual(verifyFailRes.errorCode, 'ETIMEDOUT');
       setMailSenderOverride(null);
     } finally {
-      config.smtp.port = origPort;
-      config.smtp.secure = origSecure;
-      config.smtp.requireTLS = origRequireTLS;
+      config.email.resendApiKey = origApiKey;
+      config.email.from = origFrom;
     }
-    console.log('   ✓ Port 465 (SMTPS) and Port 587 (STARTTLS) validated; ETIMEDOUT strictly isolated from auth errors.');
+    console.log('   ✓ Resend HTTPS API configuration, permitted testing sender, and error classification validated.');
 
     // =========================================================================
     // TEST 6: sendRegistrationOtpEmail Provider Acceptance Verification
@@ -300,13 +272,11 @@ async function runTests() {
     console.log('   ✓ sendRegistrationOtpEmail throws error when provider rejects recipient.');
 
     // =========================================================================
-    // TEST 8: sendPasswordResetOtpEmail SMTP Connection Failure (ETIMEDOUT / ECONNREFUSED)
+    // TEST 8: sendPasswordResetOtpEmail Network Failure (ETIMEDOUT / fetch failed)
     // =========================================================================
-    console.log('▶ [8/17] Testing sendPasswordResetOtpEmail SMTP Connection Failure (ETIMEDOUT)...');
-    const connErr = new Error('connect ETIMEDOUT 142.250.185.108:465');
+    console.log('▶ [8/17] Testing sendPasswordResetOtpEmail Network Failure (ETIMEDOUT)...');
+    const connErr = new Error('fetch failed: connect ETIMEDOUT 2606:4700::6810:1423:443');
     connErr.code = 'ETIMEDOUT';
-    connErr.command = 'CONN';
-    connErr.syscall = 'connect';
     setMailSenderOverride(async () => {
       throw connErr;
     });
@@ -318,23 +288,21 @@ async function runTests() {
       (err) => {
         assert.strictEqual(err.code, 'ETIMEDOUT');
         const diag = extractMailDiagnostics('sendPasswordResetOtpEmail', err, 'conn.timeout@gmail.com');
-        assert.strictEqual(diag.failureStage, 'TCP_CONNECTION', 'Must classify as TCP connection failure');
-        assert.notStrictEqual(diag.failureStage, 'SMTP_AUTHENTICATION', 'Must NOT treat ETIMEDOUT as authentication failure');
-        assert.strictEqual(diag.command, 'CONN');
-        assert.strictEqual(diag.smtpHost, 'smtp.gmail.com');
+        assert.strictEqual(diag.failureStage, 'NETWORK_FAILURE', 'Must classify as NETWORK_FAILURE');
+        assert.notStrictEqual(diag.failureStage, 'API_AUTHENTICATION', 'Must NOT treat ETIMEDOUT as auth failure');
+        assert.strictEqual(diag.provider, 'resend');
         return true;
       }
     );
-    console.log('   ✓ Connection failure cleanly propagated with ETIMEDOUT code and TCP_CONNECTION stage.');
+    console.log('   ✓ Connection failure cleanly propagated with ETIMEDOUT code and NETWORK_FAILURE stage.');
 
     // =========================================================================
-    // TEST 9: sendPasswordResetOtpEmail SMTP Auth Failure (EAUTH / 535)
+    // TEST 9: sendPasswordResetOtpEmail Provider Auth Failure (Invalid API Key / 401)
     // =========================================================================
-    console.log('▶ [9/17] Testing sendPasswordResetOtpEmail SMTP Auth Failure (EAUTH / 535)...');
-    const authErr = new Error('Invalid login: 535-5.7.8 Username and Password not accepted');
-    authErr.code = 'EAUTH';
-    authErr.responseCode = 535;
-    authErr.command = 'AUTH PLAIN';
+    console.log('▶ [9/17] Testing sendPasswordResetOtpEmail Provider Auth Failure (Invalid Key / 401)...');
+    const authErr = new Error('API key is invalid');
+    authErr.statusCode = 401;
+    authErr.name = 'invalid_api_key';
     setMailSenderOverride(async () => {
       throw authErr;
     });
@@ -344,12 +312,13 @@ async function runTests() {
         await sendPasswordResetOtpEmail('auth.fail@gmail.com', '654321');
       },
       (err) => {
-        assert.strictEqual(err.code, 'EAUTH');
-        assert.strictEqual(err.responseCode, 535);
+        assert.strictEqual(err.statusCode, 401);
+        const diag = extractMailDiagnostics('sendPasswordResetOtpEmail', err, 'auth.fail@gmail.com');
+        assert.strictEqual(diag.failureStage, 'API_AUTHENTICATION');
         return true;
       }
     );
-    console.log('   ✓ Auth failure cleanly propagated with EAUTH code and 535 responseCode.');
+    console.log('   ✓ Auth failure cleanly propagated with 401 statusCode and API_AUTHENTICATION stage.');
 
     // =========================================================================
     // TEST 10: sendPasswordResetOtpEmail Recipient Rejection (EREJECTED / 550)
@@ -558,40 +527,40 @@ async function runTests() {
     assert.strictEqual(maskEmail('me@domain.org'), 'm***@domain.org');
     assert.strictEqual(maskEmail('invalid-email'), '***');
 
-    // 16b. Redaction of OTP codes (6 digits)
+    // 16b. Redaction of Resend API keys
+    const rawApiKeyError = 'Failed to authenticate request with key re_abc123456789_secretkey99';
+    const sanitizedApiKeyError = sanitizeProviderErrorDetails(rawApiKeyError);
+    assert.ok(!sanitizedApiKeyError.includes('re_abc123456789_secretkey99'), 'Must not contain raw Resend API key');
+    assert.ok(sanitizedApiKeyError.includes('re_[REDACTED_API_KEY]'));
+
+    // 16c. Redaction of OTP codes (6 digits)
     const rawOtpError = 'Failed to deliver OTP 839201 to inbox';
     const sanitizedOtpError = sanitizeProviderErrorDetails(rawOtpError);
     assert.ok(!sanitizedOtpError.includes('839201'), 'Must not contain raw 6-digit OTP');
     assert.ok(sanitizedOtpError.includes('[REDACTED_OTP]'));
 
-    // 16c. Redaction of 16-character App Passwords
-    const rawPassError = 'Invalid app password vtywbqsbzklymaeb rejected';
-    const sanitizedPassError = sanitizeProviderErrorDetails(rawPassError);
-    assert.ok(!sanitizedPassError.includes('vtywbqsbzklymaeb'), 'Must not contain 16-char app password');
-    assert.ok(sanitizedPassError.includes('[REDACTED_APP_PASSWORD]'));
-
-    // 16d. Redaction of tokens and credentials
+    // 16d. Redaction of passwords and tokens
     const rawTokenError = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTIzfQ password: SuperSecretPassword123';
     const sanitizedTokenError = sanitizeProviderErrorDetails(rawTokenError);
     assert.ok(!sanitizedTokenError.includes('SuperSecretPassword123'));
     assert.ok(!sanitizedTokenError.includes('eyJhbGciOiJIUzI1Ni'));
     assert.ok(sanitizedTokenError.includes('Bearer [REDACTED_TOKEN]'));
+    assert.ok(sanitizedTokenError.includes('password=[REDACTED]'));
 
     // 16e. extractMailDiagnostics safe structure
-    const sampleErr = new Error('535-5.7.8 Username and Password not accepted with OTP 719283');
-    sampleErr.code = 'EAUTH';
-    sampleErr.responseCode = 535;
-    sampleErr.command = 'AUTH PLAIN';
+    const sampleErr = new Error('Invalid API key re_invalidkey_123456789 with OTP 719283');
+    sampleErr.statusCode = 401;
+    sampleErr.name = 'invalid_api_key';
     const diag = extractMailDiagnostics('resendResetOtp', sampleErr, 'student.test@gmail.com');
     assert.strictEqual(diag.operation, 'resendResetOtp');
-    assert.strictEqual(diag.errorCode, 'EAUTH');
-    assert.strictEqual(diag.responseCode, 535);
-    assert.strictEqual(diag.command, 'AUTH PLAIN');
+    assert.strictEqual(diag.statusCode, 401);
     assert.strictEqual(diag.recipient, 's***t@gmail.com');
+    assert.strictEqual(diag.provider, 'resend');
     assert.ok(!diag.details.includes('719283'), 'Diagnostics must redact OTP');
+    assert.ok(!diag.details.includes('re_invalidkey_123456789'), 'Diagnostics must redact API key');
     assert.ok(diag.details.includes('[REDACTED_OTP]'));
     assert.strictEqual(typeof diag.timestamp, 'string');
-    console.log('   ✓ Diagnostic extraction redacts OTPs, passwords, and tokens, while safely exposing error codes.');
+    console.log('   ✓ Diagnostic extraction redacts API keys, OTPs, and tokens, while safely exposing status codes.');
 
     // =========================================================================
     // TEST 17: Account-Enumeration Protection Preserved on Forgot Password
@@ -625,8 +594,8 @@ async function runTests() {
 
     const origDiagKey = process.env.DIAGNOSTIC_KEY;
     const origSmtpSecret = process.env.SMTP_DIAGNOSTIC_SECRET;
-    const origUser = config.smtp.user;
-    const origPass = config.smtp.appPassword;
+    const origApiKeyVal = config.email.resendApiKey;
+    const origFromVal = config.email.from;
     try {
       // 18a. Disabled by default when DIAGNOSTIC_KEY is not configured (returns 404)
       delete process.env.DIAGNOSTIC_KEY;
@@ -650,8 +619,7 @@ async function runTests() {
       assert.strictEqual(wrongKeyRes.status, 403, 'Must reject invalid authorization key');
 
       // 18d. Valid key with successful connectivity returns 200 and safe diagnostics
-      config.smtp.user = 'test.student@gmail.com';
-      config.smtp.appPassword = 'testapppassword16';
+      config.email.resendApiKey = 're_test_mock_api_key_valid_32_characters';
 
       setMailSenderOverride(async (data) => {
         if (data.type === 'verify') return { ok: true };
@@ -663,16 +631,22 @@ async function runTests() {
 
       assert.strictEqual(validDiagRes.status, 200);
       assert.strictEqual(validDiagRes.body.success, true);
-      assert.strictEqual(validDiagRes.body.smtpHost, 'smtp.gmail.com');
-      assert.strictEqual(validDiagRes.body.smtpPort, 465);
-      assert.strictEqual(validDiagRes.body.smtpFamily, 4);
+      assert.strictEqual(validDiagRes.body.provider, 'resend');
+      assert.strictEqual(validDiagRes.body.deliveryType, 'https');
       assert.strictEqual(validDiagRes.body.authConfigured, true);
       assert.strictEqual(validDiagRes.body.password, undefined, 'Must NEVER leak credentials');
       assert.strictEqual(validDiagRes.body.appPassword, undefined, 'Must NEVER leak app passwords');
+      assert.strictEqual(validDiagRes.body.resendApiKey, undefined, 'Must NEVER leak Resend API key');
 
-      // Verify authConfigured accurately reflects when SMTP credentials are not configured
-      config.smtp.user = '';
-      config.smtp.appPassword = '';
+      // Also test alias route /api/auth/diagnostic/email
+      const aliasDiagRes = await request(app)
+        .get('/api/auth/diagnostic/email')
+        .set('x-diagnostic-key', testSecretKey);
+      assert.strictEqual(aliasDiagRes.status, 200);
+      assert.strictEqual(aliasDiagRes.body.provider, 'resend');
+
+      // Verify authConfigured accurately reflects when Resend API key is not configured
+      config.email.resendApiKey = '';
 
       const unconfiguredRes = await request(app)
         .get('/api/auth/diagnostic/smtp')
@@ -680,15 +654,14 @@ async function runTests() {
 
       assert.strictEqual(unconfiguredRes.status, 200);
       assert.strictEqual(unconfiguredRes.body.authConfigured, false);
-      assert.strictEqual(unconfiguredRes.body.password, undefined, 'Must NEVER leak credentials');
-      assert.strictEqual(unconfiguredRes.body.appPassword, undefined, 'Must NEVER leak app passwords');
+      assert.strictEqual(unconfiguredRes.body.password, undefined);
+      assert.strictEqual(unconfiguredRes.body.resendApiKey, undefined);
 
       // 18e. Valid key with connection failure returns 503 with failureStage
       setMailSenderOverride(async (data) => {
         if (data.type === 'verify') {
-          const timeoutErr = new Error('Connection timeout');
+          const timeoutErr = new Error('fetch failed: connect ETIMEDOUT');
           timeoutErr.code = 'ETIMEDOUT';
-          timeoutErr.command = 'CONN';
           return { error: timeoutErr };
         }
       });
@@ -699,13 +672,13 @@ async function runTests() {
 
       assert.strictEqual(failDiagRes.status, 503);
       assert.strictEqual(failDiagRes.body.success, false);
-      assert.strictEqual(failDiagRes.body.failureStage, 'TCP_CONNECTION');
+      assert.strictEqual(failDiagRes.body.failureStage, 'NETWORK_FAILURE');
       assert.strictEqual(failDiagRes.body.errorCode, 'ETIMEDOUT');
-      assert.ok(failDiagRes.body.details.includes('Connection timeout'));
+      assert.ok(failDiagRes.body.details.includes('fetch failed'));
       setMailSenderOverride(null);
     } finally {
-      config.smtp.user = origUser;
-      config.smtp.appPassword = origPass;
+      config.email.resendApiKey = origApiKeyVal;
+      config.email.from = origFromVal;
       if (origDiagKey !== undefined) {
         process.env.DIAGNOSTIC_KEY = origDiagKey;
       } else {

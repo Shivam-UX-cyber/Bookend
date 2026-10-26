@@ -178,7 +178,7 @@ In your GitHub repository, navigate to **Settings** → **Secrets and variables*
    - `CLIENT_URL`: URL of your frontend Render service, e.g. `https://bookend-frontend.onrender.com` (no trailing slash)
    - `COOKIE_SAME_SITE`: `none`
    - `COOKIE_SECURE`: `true`
-   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `EMAIL_USER`, `EMAIL_APP_PASSWORD`
+   - `RESEND_API_KEY`, `EMAIL_FROM` (Resend HTTPS API — Render Free blocks outbound SMTP ports 465/587, so Resend's HTTPS API operates over port 443 with 100% reliability)
 
 ### 6.2 Frontend Render Web Service
 1. In [render.com](https://render.com), click **New +** → **Web Service**.

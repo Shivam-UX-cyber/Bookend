@@ -22,6 +22,11 @@ export const config = {
     }
     return process.env.NODE_ENV === 'production' ? 1 : false;
   })(),
+  email: {
+    provider: 'resend',
+    resendApiKey: (process.env.RESEND_API_KEY || '').trim(),
+    from: (process.env.EMAIL_FROM || 'Campus Book Exchange <onboarding@resend.dev>').trim(),
+  },
   smtp: {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT, 10) || 465,
@@ -31,7 +36,7 @@ export const config = {
     requireTLS: process.env.SMTP_REQUIRE_TLS !== undefined
       ? process.env.SMTP_REQUIRE_TLS === 'true'
       : (parseInt(process.env.SMTP_PORT, 10) || 465) === 587,
-    family: parseInt(process.env.SMTP_FAMILY, 10) || 4, // Default to IPv4 to prevent IPv6 routing blackholes in containers
+    family: parseInt(process.env.SMTP_FAMILY, 10) || 4,
     connectionTimeout: parseInt(process.env.SMTP_CONNECTION_TIMEOUT, 10) || 10000,
     greetingTimeout: parseInt(process.env.SMTP_GREETING_TIMEOUT, 10) || 10000,
     socketTimeout: parseInt(process.env.SMTP_SOCKET_TIMEOUT, 10) || 15000,
@@ -94,24 +99,13 @@ export const validateEnv = () => {
     throw new Error(fatalErrors.join(' | '));
   }
 
-  if (!config.smtp.user || !config.smtp.appPassword) {
-    warnings.push('SMTP credentials (EMAIL_USER / EMAIL_APP_PASSWORD / EMAIL_PASS) are not configured. Emails will fail to send until set in environment.');
+  if (!config.email.resendApiKey) {
+    warnings.push('Email provider API key (RESEND_API_KEY) is not configured. Emails will fail to send until set in environment.');
   } else if (
-    config.smtp.user.includes('your-verified-account') ||
-    config.smtp.appPassword.includes('your-16-char')
+    config.email.resendApiKey.includes('your-resend-api-key') ||
+    config.email.resendApiKey.includes('re_your_api_key')
   ) {
-    warnings.push('SMTP credentials in environment are using placeholder values (your-verified-account / your-16-char). Real credentials are required for OTP delivery.');
-  }
-
-  // Validate SMTP Port & TLS consistency
-  if (config.smtp.port === 587 && config.smtp.secure === true) {
-    warnings.push('Inconsistent SMTP config: Port 587 uses STARTTLS (SMTP_SECURE=false). Setting SMTP_SECURE=true on port 587 causes immediate connection failure.');
-  }
-  if (config.smtp.port === 465 && config.smtp.secure === false) {
-    warnings.push('Inconsistent SMTP config: Port 465 uses SMTPS/implicit TLS (SMTP_SECURE=true). Setting SMTP_SECURE=false on port 465 causes connection timeouts.');
-  }
-  if (config.smtp.port === 25) {
-    warnings.push('Insecure / blocked SMTP port 25 is configured. Major cloud platforms (including Render) block outbound port 25. Use port 465 (SMTPS) or port 587 (STARTTLS).');
+    warnings.push('RESEND_API_KEY in environment is using a placeholder value. A real Resend API key is required for OTP delivery.');
   }
 
   return warnings;
