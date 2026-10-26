@@ -15,7 +15,11 @@ import {
   sanitizeProviderErrorDetails,
   extractMailDiagnostics,
   logSafeMailError,
+  classifyMailErrorStage,
+  getTransporterOptions,
+  verifySmtpConnection,
 } from '../src/services/mailService.js';
+import { validateEnv } from '../src/config/env.js';
 import { User } from '../src/models/User.js';
 import { PendingRegistration } from '../src/models/PendingRegistration.js';
 import { PasswordReset } from '../src/models/PasswordReset.js';
@@ -161,25 +165,111 @@ async function runTests() {
     console.log('   ✓ Rate limits enforced per client IP; other IPs unaffected.');
 
     // =========================================================================
-    // TEST 5: SMTP Port 465 SSL Resolution & App Password Sanitization
+    // TEST 5: SMTP Port 465 (SMTPS) vs Port 587 (STARTTLS) Configuration & Validation
     // =========================================================================
-    console.log('▶ [5/11] Testing SMTP Port 465 SSL Resolution & Whitespace Sanitization...');
-    const sanitizePassword = (pass) => (pass || '').replace(/\s+/g, '').trim();
-    const resolveSecure = (port, secureEnv) => {
-      if (secureEnv !== undefined) return secureEnv === 'true';
-      return (parseInt(port, 10) || 465) === 465;
-    };
+    console.log('▶ [5/17] Testing SMTP Port 465 (SMTPS) vs Port 587 (STARTTLS) Configuration...');
 
-    assert.strictEqual(sanitizePassword('abcd efgh ijkl mnop'), 'abcdefghijklmnop');
-    assert.strictEqual(resolveSecure(undefined, undefined), true, 'Default port 465 must have secure: true');
-    assert.strictEqual(resolveSecure(465, undefined), true, 'Port 465 must have secure: true');
-    assert.strictEqual(resolveSecure(587, undefined), false, 'Port 587 must have secure: false');
-    console.log('   ✓ SMTP defaults to secure: true on port 465 and strips Google App Password spaces.');
+    const origPort = config.smtp.port;
+    const origSecure = config.smtp.secure;
+    const origRequireTLS = config.smtp.requireTLS;
+
+    try {
+      // 5a. Port 465 (Implicit TLS) Options Evaluation
+      config.smtp.port = 465;
+      config.smtp.secure = true;
+      config.smtp.requireTLS = false;
+      const opts465 = getTransporterOptions();
+      assert.strictEqual(opts465.port, 465);
+      assert.strictEqual(opts465.secure, true, 'Port 465 must use implicit TLS (secure: true)');
+      assert.strictEqual(opts465.requireTLS, false, 'Port 465 already starts in TLS');
+      assert.strictEqual(opts465.family, 4, 'Must default to IPv4 to prevent container IPv6 blackholes');
+      assert.strictEqual(opts465.tls.minVersion, 'TLSv1.2');
+      assert.strictEqual(opts465.tls.rejectUnauthorized, true);
+
+      // 5b. Port 587 (STARTTLS) Options Evaluation
+      config.smtp.port = 587;
+      config.smtp.secure = false;
+      config.smtp.requireTLS = true;
+      const opts587 = getTransporterOptions();
+      assert.strictEqual(opts587.port, 587);
+      assert.strictEqual(opts587.secure, false, 'Port 587 must start plaintext (secure: false)');
+      assert.strictEqual(opts587.requireTLS, true, 'Port 587 MUST require STARTTLS to prevent credential exposure');
+      assert.strictEqual(opts587.family, 4);
+      assert.strictEqual(opts587.tls.minVersion, 'TLSv1.2');
+      assert.strictEqual(opts587.tls.rejectUnauthorized, true);
+
+      // 5c. Whitespace stripping for Google App Password
+      const sanitizePassword = (pass) => (pass || '').replace(/\s+/g, '').trim();
+      assert.strictEqual(sanitizePassword('abcd efgh ijkl mnop'), 'abcdefghijklmnop');
+
+      // 5d. validateEnv warnings for misconfigured port/TLS combinations
+      config.smtp.port = 587;
+      config.smtp.secure = true; // Inconsistent!
+      const warnings587 = validateEnv();
+      assert.ok(warnings587.some((w) => w.includes('Port 587 uses STARTTLS')), 'Must warn on secure: true with port 587');
+
+      config.smtp.port = 465;
+      config.smtp.secure = false; // Inconsistent!
+      const warnings465 = validateEnv();
+      assert.ok(warnings465.some((w) => w.includes('Port 465 uses SMTPS')), 'Must warn on secure: false with port 465');
+
+      config.smtp.port = 25;
+      config.smtp.secure = false;
+      const warnings25 = validateEnv();
+      assert.ok(warnings25.some((w) => w.includes('port 25 is configured')), 'Must warn on blocked port 25');
+
+      // 5e. classifyMailErrorStage isolates TCP_CONNECTION from SMTP_AUTHENTICATION
+      const tcpTimeoutErr = new Error('Connection timeout');
+      tcpTimeoutErr.code = 'ETIMEDOUT';
+      tcpTimeoutErr.command = 'CONN';
+      assert.strictEqual(classifyMailErrorStage(tcpTimeoutErr), 'TCP_CONNECTION');
+      assert.notStrictEqual(classifyMailErrorStage(tcpTimeoutErr), 'SMTP_AUTHENTICATION', 'ETIMEDOUT must NOT be classified as auth failure');
+
+      const refusedErr = new Error('connect ECONNREFUSED 127.0.0.1:465');
+      refusedErr.code = 'ECONNREFUSED';
+      assert.strictEqual(classifyMailErrorStage(refusedErr), 'TCP_CONNECTION');
+
+      const tlsErr = new Error('SSL alert handshake failure');
+      tlsErr.code = 'ETLS';
+      assert.strictEqual(classifyMailErrorStage(tlsErr), 'TLS_NEGOTIATION');
+
+      const authErr = new Error('Invalid login: 535 5.7.8 Username and Password not accepted');
+      authErr.code = 'EAUTH';
+      authErr.responseCode = 535;
+      assert.strictEqual(classifyMailErrorStage(authErr), 'SMTP_AUTHENTICATION');
+
+      // 5f. verifySmtpConnection test with mock
+      setMailSenderOverride(async (data) => {
+        if (data.type === 'verify') return { ok: true };
+      });
+      const verifyRes = await verifySmtpConnection();
+      assert.strictEqual(verifyRes.success, true);
+
+      // 5g. verifySmtpConnection test with connection failure
+      setMailSenderOverride(async (data) => {
+        if (data.type === 'verify') {
+          const timeoutErr = new Error('Connection timeout');
+          timeoutErr.code = 'ETIMEDOUT';
+          timeoutErr.command = 'CONN';
+          return { error: timeoutErr };
+        }
+      });
+      const verifyFailRes = await verifySmtpConnection();
+      assert.strictEqual(verifyFailRes.success, false);
+      assert.strictEqual(verifyFailRes.failureStage, 'TCP_CONNECTION');
+      assert.strictEqual(verifyFailRes.errorCode, 'ETIMEDOUT');
+      setMailSenderOverride(null);
+    } finally {
+      config.smtp.port = origPort;
+      config.smtp.secure = origSecure;
+      config.smtp.requireTLS = origRequireTLS;
+    }
+    console.log('   ✓ Port 465 (SMTPS) and Port 587 (STARTTLS) validated; ETIMEDOUT strictly isolated from auth errors.');
 
     // =========================================================================
     // TEST 6: sendRegistrationOtpEmail Provider Acceptance Verification
     // =========================================================================
-    console.log('▶ [6/11] Testing sendRegistrationOtpEmail Provider Acceptance...');
+    console.log('▶ [6/17] Testing sendRegistrationOtpEmail Provider Acceptance...');
     setMailSenderOverride(async (data) => ({
       messageId: '<msg-reg-success@gmail.com>',
       accepted: [data.to],
@@ -194,7 +284,7 @@ async function runTests() {
     // =========================================================================
     // TEST 7: sendRegistrationOtpEmail Provider Rejection Handling
     // =========================================================================
-    console.log('▶ [7/11] Testing sendRegistrationOtpEmail Provider Rejection...');
+    console.log('▶ [7/17] Testing sendRegistrationOtpEmail Provider Rejection...');
     setMailSenderOverride(async (data) => ({
       messageId: '<msg-reg-fail@gmail.com>',
       accepted: [],
@@ -227,10 +317,15 @@ async function runTests() {
       },
       (err) => {
         assert.strictEqual(err.code, 'ETIMEDOUT');
+        const diag = extractMailDiagnostics('sendPasswordResetOtpEmail', err, 'conn.timeout@gmail.com');
+        assert.strictEqual(diag.failureStage, 'TCP_CONNECTION', 'Must classify as TCP connection failure');
+        assert.notStrictEqual(diag.failureStage, 'SMTP_AUTHENTICATION', 'Must NOT treat ETIMEDOUT as authentication failure');
+        assert.strictEqual(diag.command, 'CONN');
+        assert.strictEqual(diag.smtpHost, 'smtp.gmail.com');
         return true;
       }
     );
-    console.log('   ✓ Connection failure cleanly propagated with ETIMEDOUT code.');
+    console.log('   ✓ Connection failure cleanly propagated with ETIMEDOUT code and TCP_CONNECTION stage.');
 
     // =========================================================================
     // TEST 9: sendPasswordResetOtpEmail SMTP Auth Failure (EAUTH / 535)

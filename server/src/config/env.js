@@ -28,6 +28,13 @@ export const config = {
     secure: process.env.SMTP_SECURE !== undefined
       ? process.env.SMTP_SECURE === 'true'
       : (parseInt(process.env.SMTP_PORT, 10) || 465) === 465,
+    requireTLS: process.env.SMTP_REQUIRE_TLS !== undefined
+      ? process.env.SMTP_REQUIRE_TLS === 'true'
+      : (parseInt(process.env.SMTP_PORT, 10) || 465) === 587,
+    family: parseInt(process.env.SMTP_FAMILY, 10) || 4, // Default to IPv4 to prevent IPv6 routing blackholes in containers
+    connectionTimeout: parseInt(process.env.SMTP_CONNECTION_TIMEOUT, 10) || 10000,
+    greetingTimeout: parseInt(process.env.SMTP_GREETING_TIMEOUT, 10) || 10000,
+    socketTimeout: parseInt(process.env.SMTP_SOCKET_TIMEOUT, 10) || 15000,
     user: (process.env.EMAIL_USER || process.env.SMTP_USER || '').trim(),
     appPassword: (
       process.env.EMAIL_APP_PASSWORD ||
@@ -94,6 +101,17 @@ export const validateEnv = () => {
     config.smtp.appPassword.includes('your-16-char')
   ) {
     warnings.push('SMTP credentials in environment are using placeholder values (your-verified-account / your-16-char). Real credentials are required for OTP delivery.');
+  }
+
+  // Validate SMTP Port & TLS consistency
+  if (config.smtp.port === 587 && config.smtp.secure === true) {
+    warnings.push('Inconsistent SMTP config: Port 587 uses STARTTLS (SMTP_SECURE=false). Setting SMTP_SECURE=true on port 587 causes immediate connection failure.');
+  }
+  if (config.smtp.port === 465 && config.smtp.secure === false) {
+    warnings.push('Inconsistent SMTP config: Port 465 uses SMTPS/implicit TLS (SMTP_SECURE=true). Setting SMTP_SECURE=false on port 465 causes connection timeouts.');
+  }
+  if (config.smtp.port === 25) {
+    warnings.push('Insecure / blocked SMTP port 25 is configured. Major cloud platforms (including Render) block outbound port 25. Use port 465 (SMTPS) or port 587 (STARTTLS).');
   }
 
   return warnings;

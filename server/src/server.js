@@ -158,7 +158,7 @@ export const startServer = async () => {
     console.log('\x1b[36m%s\x1b[0m', `[Server] Allowed Origins: ${allowedOrigins.join(', ')}`);
     console.log('\x1b[36m%s\x1b[0m', `[Server] Health Endpoint: http://localhost:${config.port}/api/health`);
     const maskedSmtpUser = config.smtp.user ? config.smtp.user.replace(/^(.)(.*)(.@.*)$/, '$1***$3') : 'NOT_SET';
-    console.log('\x1b[36m%s\x1b[0m', `[Server] SMTP Delivery Engine: host=${config.smtp.host}:${config.smtp.port} secure=${config.smtp.secure} user=${maskedSmtpUser} authConfigured=${Boolean(config.smtp.user && config.smtp.appPassword)}`);
+    console.log('\x1b[36m%s\x1b[0m', `[Server] SMTP Delivery Engine: host=${config.smtp.host}:${config.smtp.port} secure=${config.smtp.secure} requireTLS=${config.smtp.requireTLS} family=IPv${config.smtp.family} user=${maskedSmtpUser} authConfigured=${Boolean(config.smtp.user && config.smtp.appPassword)}`);
   });
 
   // Graceful shutdown handling

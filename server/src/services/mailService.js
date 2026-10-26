@@ -64,6 +64,67 @@ export const sanitizeProviderErrorDetails = (text) => {
 };
 
 /**
+ * Classifies an error into specific failure stages:
+ * - 'TCP_CONNECTION': Network, timeout, firewall, or port unreachable
+ * - 'DNS_RESOLUTION': Hostname lookup failed
+ * - 'TLS_NEGOTIATION': Handshake failure or STARTTLS upgrade error
+ * - 'SMTP_AUTHENTICATION': Invalid App Password or user rejected (535)
+ * - 'RECIPIENT_REJECTION': Provider rejected recipient mailbox (550)
+ * - 'PROVIDER_RATE_LIMIT': Temporary throttling (421/450/451)
+ * - 'CONFIGURATION_MISSING': Environment variables not provided
+ * - 'PROTOCOL_OR_UNKNOWN': Uncategorized protocol or application failure
+ * @param {Error|object} err
+ * @returns {string}
+ */
+export const classifyMailErrorStage = (err) => {
+  if (!err) return 'UNKNOWN';
+  const code = err.code || '';
+  const command = err.command || '';
+  const syscall = err.syscall || '';
+  const message = err.message || '';
+  const responseCode = err.responseCode || (typeof err.response === 'string' && err.response.match(/^\d{3}/) ? parseInt(err.response.substring(0, 3), 10) : null);
+
+  if (code === 'ECONFIG_MISSING' || /not configured/i.test(message)) {
+    return 'CONFIGURATION_MISSING';
+  }
+
+  if (code === 'ENOTFOUND' || syscall === 'getaddrinfo') {
+    return 'DNS_RESOLUTION';
+  }
+
+  if (
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ECONNRESET' ||
+    code === 'EHOSTUNREACH' ||
+    code === 'ENETUNREACH' ||
+    command === 'CONN' ||
+    syscall === 'connect' ||
+    /connection timeout/i.test(message)
+  ) {
+    return 'TCP_CONNECTION';
+  }
+
+  if (code === 'ETLS' || code === 'ESOCKET' || /certificate|handshake|tls|ssl|starttls/i.test(message)) {
+    return 'TLS_NEGOTIATION';
+  }
+
+  if (code === 'EAUTH' || responseCode === 535 || command.startsWith('AUTH') || /invalid login|username and password not accepted/i.test(message)) {
+    return 'SMTP_AUTHENTICATION';
+  }
+
+  if (code === 'EREJECTED' || responseCode === 550 || command === 'RCPT TO' || /rejected/i.test(message)) {
+    return 'RECIPIENT_REJECTION';
+  }
+
+  if (responseCode === 421 || responseCode === 450 || responseCode === 451 || responseCode === 452 || /rate limit|quota|too many/i.test(message)) {
+    return 'PROVIDER_RATE_LIMIT';
+  }
+
+  return 'PROTOCOL_OR_UNKNOWN';
+};
+
+/**
  * Safely extracts non-sensitive SMTP diagnostics from an Error or Nodemailer response.
  * Strictly guarantees that passwords, tokens, cookies, and 6-digit OTP codes are NEVER logged.
  * @param {string} operation
@@ -75,9 +136,11 @@ export const extractMailDiagnostics = (operation, err, recipientEmail = null) =>
   const errorObj = err || {};
   const rawMessage = errorObj.message || String(errorObj);
   const rawResponse = errorObj.response || null;
+  const failureStage = classifyMailErrorStage(errorObj);
 
   return {
     operation: operation || 'unknownMailOperation',
+    failureStage,
     errorName: errorObj.name || 'Error',
     errorCode: errorObj.code || null,
     responseCode: errorObj.responseCode || (typeof errorObj.response === 'string' && errorObj.response.match(/^\d{3}/) ? parseInt(errorObj.response.substring(0, 3), 10) : null),
@@ -86,6 +149,8 @@ export const extractMailDiagnostics = (operation, err, recipientEmail = null) =>
     smtpHost: config.smtp?.host || 'smtp.gmail.com',
     smtpPort: config.smtp?.port || 465,
     smtpSecure: Boolean(config.smtp?.secure),
+    smtpRequireTLS: Boolean(config.smtp?.requireTLS),
+    smtpFamily: config.smtp?.family || 4,
     isConfigured: isSmtpConfigured(),
     recipient: recipientEmail ? maskEmail(recipientEmail) : null,
     details: sanitizeProviderErrorDetails(rawResponse || rawMessage),
@@ -122,25 +187,99 @@ export const logSafeMailSuccess = (operation, info, recipientEmail = null) => {
     acceptedRecipients: accepted,
     smtpHost: config.smtp?.host || 'smtp.gmail.com',
     smtpPort: config.smtp?.port || 465,
+    smtpSecure: Boolean(config.smtp?.secure),
+    smtpRequireTLS: Boolean(config.smtp?.requireTLS),
     timestamp: new Date().toISOString(),
   };
   console.log('\x1b[32m%s\x1b[0m', `[MailService Success] ${JSON.stringify(logData)}`);
   return logData;
 };
 
-const createTransporter = () => {
-  return nodemailer.createTransport({
+/**
+ * Constructs and validates Nodemailer transport configuration.
+ * - Port 465: implicit TLS (secure: true, requireTLS: false)
+ * - Port 587: STARTTLS (secure: false, requireTLS: true to strictly prevent plaintext downgrade)
+ * - IPv4 forced by default (family: 4) to eliminate container IPv6 blackhole timeouts
+ * @returns {object}
+ */
+export const getTransporterOptions = () => {
+  const secure = config.smtp.secure;
+  const requireTLS = config.smtp.requireTLS !== undefined
+    ? config.smtp.requireTLS
+    : (!secure || config.smtp.port === 587);
+
+  return {
     host: config.smtp.host,
     port: config.smtp.port,
-    secure: config.smtp.secure,
+    secure,
+    requireTLS,
     auth: {
       user: config.smtp.user,
       pass: config.smtp.appPassword,
     },
-    connectionTimeout: 10000, // 10 seconds
-    greetingTimeout: 10000,   // 10 seconds
-    socketTimeout: 15000,     // 15 seconds
-  });
+    tls: {
+      minVersion: 'TLSv1.2',
+      rejectUnauthorized: true,
+    },
+    family: config.smtp.family || 4, // Force IPv4 by default to avoid IPv6 routing blackholes in containers
+    connectionTimeout: config.smtp.connectionTimeout || 10000, // 10 seconds
+    greetingTimeout: config.smtp.greetingTimeout || 10000,     // 10 seconds
+    socketTimeout: config.smtp.socketTimeout || 15000,         // 15 seconds
+  };
+};
+
+export const createTransporter = () => {
+  return nodemailer.createTransport(getTransporterOptions());
+};
+
+/**
+ * Tests SMTP connectivity and authentication with the configured provider.
+ * Does not send an email. Returns structured status for diagnostics.
+ * @returns {Promise<{ success: boolean, failureStage: string|null, details?: string, errorCode?: string }>}
+ */
+export const verifySmtpConnection = async () => {
+  if (mailSenderOverride) {
+    try {
+      const overrideResult = await mailSenderOverride({ type: 'verify' });
+      if (overrideResult && overrideResult.error) {
+        throw overrideResult.error;
+      }
+      return { success: true, failureStage: null, mocked: true };
+    } catch (overrideErr) {
+      const diag = logSafeMailError('verifySmtpConnection', overrideErr);
+      return {
+        success: false,
+        failureStage: diag.failureStage,
+        errorCode: diag.errorCode,
+        details: diag.details,
+      };
+    }
+  }
+  if (!isSmtpConfigured()) {
+    return {
+      success: false,
+      failureStage: 'CONFIGURATION_MISSING',
+      details: 'SMTP credentials missing or placeholder values in environment.',
+    };
+  }
+
+  const transporter = createTransporter();
+  try {
+    await transporter.verify();
+    return {
+      success: true,
+      failureStage: null,
+      details: 'SMTP connection and authentication verified successfully.',
+    };
+  } catch (err) {
+    const diag = logSafeMailError('verifySmtpConnection', err);
+    return {
+      success: false,
+      failureStage: diag.failureStage,
+      errorCode: diag.errorCode,
+      details: diag.details,
+    };
+  }
 };
 
 /**
