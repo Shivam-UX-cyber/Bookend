@@ -624,6 +624,9 @@ async function runTests() {
     console.log('▶ [18/18] Testing Protected Remote Diagnostic Endpoint Security & Verification...');
 
     const origDiagKey = process.env.DIAGNOSTIC_KEY;
+    const origSmtpSecret = process.env.SMTP_DIAGNOSTIC_SECRET;
+    const origUser = config.smtp.user;
+    const origPass = config.smtp.appPassword;
     try {
       // 18a. Disabled by default when DIAGNOSTIC_KEY is not configured (returns 404)
       delete process.env.DIAGNOSTIC_KEY;
@@ -647,6 +650,9 @@ async function runTests() {
       assert.strictEqual(wrongKeyRes.status, 403, 'Must reject invalid authorization key');
 
       // 18d. Valid key with successful connectivity returns 200 and safe diagnostics
+      config.smtp.user = 'test.student@gmail.com';
+      config.smtp.appPassword = 'testapppassword16';
+
       setMailSenderOverride(async (data) => {
         if (data.type === 'verify') return { ok: true };
       });
@@ -663,6 +669,19 @@ async function runTests() {
       assert.strictEqual(validDiagRes.body.authConfigured, true);
       assert.strictEqual(validDiagRes.body.password, undefined, 'Must NEVER leak credentials');
       assert.strictEqual(validDiagRes.body.appPassword, undefined, 'Must NEVER leak app passwords');
+
+      // Verify authConfigured accurately reflects when SMTP credentials are not configured
+      config.smtp.user = '';
+      config.smtp.appPassword = '';
+
+      const unconfiguredRes = await request(app)
+        .get('/api/auth/diagnostic/smtp')
+        .set('x-diagnostic-key', testSecretKey);
+
+      assert.strictEqual(unconfiguredRes.status, 200);
+      assert.strictEqual(unconfiguredRes.body.authConfigured, false);
+      assert.strictEqual(unconfiguredRes.body.password, undefined, 'Must NEVER leak credentials');
+      assert.strictEqual(unconfiguredRes.body.appPassword, undefined, 'Must NEVER leak app passwords');
 
       // 18e. Valid key with connection failure returns 503 with failureStage
       setMailSenderOverride(async (data) => {
@@ -685,11 +704,19 @@ async function runTests() {
       assert.ok(failDiagRes.body.details.includes('Connection timeout'));
       setMailSenderOverride(null);
     } finally {
+      config.smtp.user = origUser;
+      config.smtp.appPassword = origPass;
       if (origDiagKey !== undefined) {
         process.env.DIAGNOSTIC_KEY = origDiagKey;
       } else {
         delete process.env.DIAGNOSTIC_KEY;
       }
+      if (origSmtpSecret !== undefined) {
+        process.env.SMTP_DIAGNOSTIC_SECRET = origSmtpSecret;
+      } else {
+        delete process.env.SMTP_DIAGNOSTIC_SECRET;
+      }
+      setMailSenderOverride(null);
     }
     console.log('   ✓ Remote diagnostic endpoint strictly protected by secret key, never leaks credentials, and reports stages accurately.');
 

@@ -1308,9 +1308,9 @@ export const diagnosticSmtp = async (req, res) => {
     });
   }
 
-  const serverBuf = Buffer.from(serverKey);
-  const clientBuf = Buffer.from(clientKey);
-  if (serverBuf.length !== clientBuf.length || !crypto.timingSafeEqual(serverBuf, clientBuf)) {
+  const serverHash = crypto.createHash('sha256').update(serverKey).digest();
+  const clientHash = crypto.createHash('sha256').update(clientKey).digest();
+  if (!crypto.timingSafeEqual(serverHash, clientHash)) {
     return res.status(403).json({
       success: false,
       message: 'Forbidden: Invalid diagnostic authorization key.',
