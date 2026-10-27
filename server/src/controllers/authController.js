@@ -31,36 +31,9 @@ const MAX_OTP_ATTEMPTS = 5;
 // Pre-computed hash used for constant-time comparisons when a user is not found (anti-enumeration)
 const DUMMY_HASH = '$2a$12$e80MvQhXb/fG5NqN6U7e3.bB6O9rVvMvF5R2nU7J9n4N2P3O4Q5R6';
 
-// Cookie settings for authentication session
-// In cross-site production (Vercel frontend + Render backend), sameSite='none' & secure=true
-// are required by modern browsers to send cookies on credentialed API calls.
-export const getCookieOptions = (maxAgeMs = 7 * 24 * 60 * 60 * 1000) => {
-  const isProd = config.nodeEnv === 'production';
-  const sameSite = (config.cookieSameSite || (isProd ? 'none' : 'lax')).toLowerCase();
-  // Modern browsers require secure: true when sameSite is 'none'
-  const secure = sameSite === 'none' ? true : (config.cookieSecure ?? isProd);
-
-  return {
-    httpOnly: true,
-    secure,
-    sameSite,
-    path: '/',
-    maxAge: maxAgeMs,
-  };
-};
-
-export const getClearCookieOptions = () => {
-  const isProd = config.nodeEnv === 'production';
-  const sameSite = (config.cookieSameSite || (isProd ? 'none' : 'lax')).toLowerCase();
-  const secure = sameSite === 'none' ? true : (config.cookieSecure ?? isProd);
-
-  return {
-    httpOnly: true,
-    secure,
-    sameSite,
-    path: '/',
-  };
-};
+// Canonical cookie settings imported from cookieHelper utility
+export { getCookieOptions, getClearCookieOptions } from '../utils/cookieHelper.js';
+import { getCookieOptions, getClearCookieOptions } from '../utils/cookieHelper.js';
 
 /**
  * Helpers to safely sign/read flow session cookies

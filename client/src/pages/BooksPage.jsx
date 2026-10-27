@@ -509,10 +509,8 @@ export const BooksPage = () => {
                       type="button"
                       className="category-pill-btn"
                       onClick={() => {
-                        setSearchQuery('');
-                        setSelectedCondition('');
-                        setSelectedCategory(cat);
-                        setCurrentPage(1);
+                        setSearchInput('');
+                        setSearchParams(new URLSearchParams({ category: cat }), { replace: false });
                       }}
                     >
                       {cat}

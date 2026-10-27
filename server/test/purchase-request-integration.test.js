@@ -1090,7 +1090,42 @@ async function runPurchaseRequestIntegrationTests() {
     assert.strictEqual(book29Check.acceptedRequest, null, 'acceptedRequest must be null');
     console.log('   ✓ Rollback compensation successfully prevents orphaned reservations.\n');
 
-    console.log('🎉 ALL 29 PURCHASE REQUEST & SALE LIFECYCLE INTEGRATION TEST SUITES PASSED!\n');
+    // -------------------------------------------------------------------------
+    // TEST 30: Partial Unique Index Enforces At Most One Accepted Request Per Book
+    // -------------------------------------------------------------------------
+    console.log('▶ [30/30] Testing Database Partial Unique Index: Single Accepted Request Per Book...');
+    const book30 = await createTestBook(sellerAlice.user._id, { title: 'Concurrency Invariants in Practice' });
+    const buyerCharlie = await createUserSession('Charlie Buyer', 'charlie.buyer30@gmail.com');
+
+    // Ensure indexes are built on the test collection
+    await PurchaseRequest.syncIndexes();
+
+    const req30Bob = await PurchaseRequest.create({
+      book: book30._id,
+      buyer: buyerBob.user._id,
+      seller: sellerAlice.user._id,
+      status: 'accepted',
+    });
+    assert.strictEqual(req30Bob.status, 'accepted');
+
+    // Attempting to create or update another request to 'accepted' for book30 MUST throw E11000
+    let duplicateIndexError = null;
+    try {
+      await PurchaseRequest.create({
+        book: book30._id,
+        buyer: buyerCharlie.user._id,
+        seller: sellerAlice.user._id,
+        status: 'accepted',
+      });
+    } catch (dbErr) {
+      duplicateIndexError = dbErr;
+    }
+
+    assert.ok(duplicateIndexError, 'Database must reject second accepted request for the same book');
+    assert.strictEqual(duplicateIndexError.code, 11000, 'Error code must be E11000 duplicate key');
+    console.log('   ✓ Partial unique index enforces single accepted purchase request per book at the database engine level.\n');
+
+    console.log('🎉 ALL 30 PURCHASE REQUEST & SALE LIFECYCLE INTEGRATION TEST SUITES PASSED!\n');
   } finally {
     await cleanup();
   }

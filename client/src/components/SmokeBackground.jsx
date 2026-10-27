@@ -158,6 +158,12 @@ export const SmokeBackground = () => {
       particles.push(new SmokeParticle(true));
     }
 
+    const motionQuery =
+      typeof window !== 'undefined' && window.matchMedia
+        ? window.matchMedia('(prefers-reduced-motion: reduce)')
+        : null;
+    let prefersReducedMotion = motionQuery ? motionQuery.matches : false;
+
     let isVisible = true;
     const handleVisibilityChange = () => {
       isVisible = !document.hidden;
@@ -167,6 +173,12 @@ export const SmokeBackground = () => {
     const handleResize = () => {
       width = canvas.width = window.innerWidth;
       height = canvas.height = window.innerHeight;
+      if (prefersReducedMotion && isVisible) {
+        ctx.clearRect(0, 0, width, height);
+        for (let i = 0; i < particles.length; i++) {
+          particles[i].draw(ctx);
+        }
+      }
     };
     window.addEventListener('resize', handleResize);
 
@@ -175,19 +187,55 @@ export const SmokeBackground = () => {
         ctx.clearRect(0, 0, width, height);
 
         for (let i = 0; i < particles.length; i++) {
-          particles[i].update(time);
+          if (!prefersReducedMotion) {
+            particles[i].update(time);
+          }
           particles[i].draw(ctx);
         }
       }
-      animationFrameId = requestAnimationFrame(render);
+      if (!prefersReducedMotion) {
+        animationFrameId = requestAnimationFrame(render);
+      }
     };
 
-    animationFrameId = requestAnimationFrame(render);
+    const handleMotionChange = (e) => {
+      prefersReducedMotion = Boolean(e.matches);
+      cancelAnimationFrame(animationFrameId);
+      if (prefersReducedMotion) {
+        if (isVisible) {
+          ctx.clearRect(0, 0, width, height);
+          for (let i = 0; i < particles.length; i++) {
+            particles[i].draw(ctx);
+          }
+        }
+      } else {
+        animationFrameId = requestAnimationFrame(render);
+      }
+    };
+
+    if (motionQuery?.addEventListener) {
+      motionQuery.addEventListener('change', handleMotionChange);
+    } else if (motionQuery?.addListener) {
+      motionQuery.addListener(handleMotionChange);
+    }
+
+    if (prefersReducedMotion) {
+      for (let i = 0; i < particles.length; i++) {
+        particles[i].draw(ctx);
+      }
+    } else {
+      animationFrameId = requestAnimationFrame(render);
+    }
 
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (motionQuery?.removeEventListener) {
+        motionQuery.removeEventListener('change', handleMotionChange);
+      } else if (motionQuery?.removeListener) {
+        motionQuery.removeListener(handleMotionChange);
+      }
     };
   }, []);
 

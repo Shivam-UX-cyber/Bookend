@@ -26,10 +26,13 @@ import { useAuth } from '../context/AuthContext';
 import { bookService, formatINR } from '../services/bookService';
 import { purchaseRequestService } from '../services/purchaseRequestService';
 import { Alert } from './Alert';
+import { useFocusTrap } from '../utils/useFocusTrap';
 
 export const BookDetailsModal = ({ bookId, initialBook = null, onClose, onListingUpdated = null }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const closeBtnRef = useRef(null);
+  const modalContainerRef = useFocusTrap(true, closeBtnRef);
 
   const [book, setBook] = useState(initialBook);
   const [isLoading, setIsLoading] = useState(!initialBook);
@@ -263,6 +266,7 @@ export const BookDetailsModal = ({ bookId, initialBook = null, onClose, onListin
       aria-labelledby="modal-book-title"
     >
       <motion.div
+        ref={modalContainerRef}
         className="book-modal-stage zoom-in-folio"
         initial={{
           opacity: 0,
@@ -302,6 +306,7 @@ export const BookDetailsModal = ({ bookId, initialBook = null, onClose, onListin
           </div>
 
           <button
+            ref={closeBtnRef}
             type="button"
             onClick={onClose}
             className="btn-modal-close-book"

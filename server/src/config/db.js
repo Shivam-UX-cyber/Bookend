@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { config } from './env.js';
+import { detectTransactionSupport, resetTransactionSupportCache } from '../utils/transactionHelper.js';
 
 export const connectDB = async (customUri = null) => {
   const uri = customUri || config.mongoUri;
@@ -12,9 +13,11 @@ export const connectDB = async (customUri = null) => {
 
   try {
     const conn = await mongoose.connect(uri, {
-      autoIndex: true, // Build indexes on startup
+      autoIndex: config.nodeEnv !== 'production', // Build indexes automatically in dev/test; disable in production to prevent startup blocks
     });
     console.log('\x1b[32m%s\x1b[0m', `[Database] MongoDB Connected: ${conn.connection.host}`);
+    // Probe database topology to authoritatively configure transaction support
+    await detectTransactionSupport(conn.connection);
     return conn;
   } catch (error) {
     console.error('\x1b[31m%s\x1b[0m', `[Database] Connection Error: ${error.message}`);
@@ -25,6 +28,7 @@ export const connectDB = async (customUri = null) => {
 export const disconnectDB = async () => {
   if (mongoose.connection.readyState !== 0) {
     await mongoose.disconnect();
+    resetTransactionSupportCache();
   }
 };
 

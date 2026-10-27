@@ -13,6 +13,11 @@ on:
       - '.github/workflows/bookend-frontend-cd.yml'
   workflow_dispatch:
 
+# Prevent concurrent or out-of-order deployments to production
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
 # Restrict default permissions to read-only for repository contents
 permissions:
   contents: read
@@ -80,7 +85,7 @@ jobs:
   publish-and-deploy:
     name: Publish Frontend Image & Deploy to Render
     needs: [ frontend-ci ]
-    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -131,6 +136,11 @@ jobs:
             exit 1
           fi
 
+          if [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "Error: DOCKERHUB_TOKEN secret is not configured in repository."
+            exit 1
+          fi
+
           # Target the exact immutable commit-SHA-tagged image published in the previous step
           IMAGE_URI="docker.io/${{ vars.DOCKERHUB_USERNAME }}/bookend-frontend:${{ github.sha }}"
           ENCODED_IMAGE_URI=$(node -e "console.log(encodeURIComponent(process.argv[1]))" "$IMAGE_URI")
@@ -144,11 +154,13 @@ jobs:
 
           echo "Initiating Render frontend deployment for image: $IMAGE_URI"
 
-          # Perform deployment webhook request without printing sensitive credentials
-          HTTP_RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST "$DEPLOY_URL")
+          # Perform deployment webhook request with strict timeouts and error capture
+          HTTP_RESPONSE=$(curl -sS --connect-timeout 15 --max-time 60 -o response.txt -w "%{http_code}" -X POST "$DEPLOY_URL" || true)
 
           if [ "$HTTP_RESPONSE" -ge 200 ] && [ "$HTTP_RESPONSE" -lt 300 ]; then
             echo "Render frontend deployment triggered successfully (HTTP $HTTP_RESPONSE)."
+            echo "Note: The Render webhook confirms deployment initiation only."
+            echo "Verify live container health, build logs, and service status in the Render Dashboard."
           else
             echo "Error: Render frontend deployment hook returned failure HTTP status: $HTTP_RESPONSE"
             if [ -f response.txt ]; then

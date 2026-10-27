@@ -438,31 +438,44 @@ export const respondToRequest = async (req, res) => {
         throw error;
       }
 
-      // Atomically transition the request from pending to accepted
-      savedRequest = await PurchaseRequest.findOneAndUpdate(
-        {
-          _id: request._id,
-          status: 'pending',
-        },
-        {
-          $set: {
-            status: 'accepted',
+      let requestUpdated = false;
+      try {
+        // Atomically transition the request from pending to accepted
+        savedRequest = await PurchaseRequest.findOneAndUpdate(
+          {
+            _id: request._id,
+            status: 'pending',
           },
-        },
-        { new: true, session: session || undefined }
-      );
+          {
+            $set: {
+              status: 'accepted',
+            },
+          },
+          { new: true, session: session || undefined }
+        );
 
-      if (!savedRequest) {
-        // Compensate for standalone MongoDB (when transaction session is null)
-        if (!session) {
-          await Book.updateOne(
-            { _id: request.book, status: 'reserved', acceptedRequest: request._id },
-            { $set: { status: 'available', acceptedRequest: null } }
-          );
+        if (!savedRequest) {
+          const error = new Error('CANNOT_ACCEPT_CONFLICT');
+          error.isConflict = true;
+          throw error;
         }
-        const error = new Error('CANNOT_ACCEPT_CONFLICT');
-        error.isConflict = true;
-        throw error;
+        requestUpdated = true;
+      } catch (step2Error) {
+        // Concurrency-safe, conditional rollback for standalone MongoDB:
+        // Revert ONLY if running outside a transaction and the request update did not succeed.
+        // Guard condition { _id: request.book, status: 'reserved', acceptedRequest: request._id }
+        // guarantees we never overwrite concurrent modifications.
+        if (!session && !requestUpdated) {
+          try {
+            await Book.updateOne(
+              { _id: request.book, status: 'reserved', acceptedRequest: request._id },
+              { $set: { status: 'available', acceptedRequest: null } }
+            );
+          } catch (compErr) {
+            console.error('[Rollback Compensation Failure: respondToRequest]', compErr);
+          }
+        }
+        throw step2Error;
       }
     });
 
@@ -501,7 +514,7 @@ export const respondToRequest = async (req, res) => {
       },
     });
   } catch (error) {
-    if (error.isConflict || error.message === 'CANNOT_ACCEPT_CONFLICT') {
+    if (error.isConflict || error.message === 'CANNOT_ACCEPT_CONFLICT' || error.code === 11000) {
       return res.status(409).json({
         success: false,
         message: 'Cannot accept request: This book is no longer available or has already been reserved by another accepted purchase request.',
@@ -652,32 +665,42 @@ export const cancelRequest = async (req, res) => {
           throw error;
         }
 
-        savedRequest = await PurchaseRequest.findOneAndUpdate(
-          {
-            _id: request._id,
-            status: 'accepted',
-          },
-          {
-            $set: {
-              status: 'cancelled',
-              cancelledBy: isBuyer ? 'buyer' : 'seller',
-              cancellationReason: req.body.reason ? req.body.reason.trim() : '',
+        let requestCancelled = false;
+        try {
+          savedRequest = await PurchaseRequest.findOneAndUpdate(
+            {
+              _id: request._id,
+              status: 'accepted',
             },
-          },
-          { new: true, session: session || undefined }
-        );
+            {
+              $set: {
+                status: 'cancelled',
+                cancelledBy: isBuyer ? 'buyer' : 'seller',
+                cancellationReason: req.body.reason ? req.body.reason.trim() : '',
+              },
+            },
+            { new: true, session: session || undefined }
+          );
 
-        if (!savedRequest) {
-          // Compensating rollback for standalone MongoDB
-          if (!session) {
-            await Book.updateOne(
-              { _id: request.book, acceptedRequest: null, status: 'available' },
-              { $set: { status: 'reserved', acceptedRequest: request._id } }
-            );
+          if (!savedRequest) {
+            const error = new Error('CANCEL_RESERVATION_CONFLICT');
+            error.isConflict = true;
+            throw error;
           }
-          const error = new Error('CANCEL_RESERVATION_CONFLICT');
-          error.isConflict = true;
-          throw error;
+          requestCancelled = true;
+        } catch (step2Error) {
+          // Compensating conditional rollback for standalone MongoDB
+          if (!session && !requestCancelled) {
+            try {
+              await Book.updateOne(
+                { _id: request.book, acceptedRequest: null, status: 'available' },
+                { $set: { status: 'reserved', acceptedRequest: request._id } }
+              );
+            } catch (compErr) {
+              console.error('[Rollback Compensation Failure: cancelRequest]', compErr);
+            }
+          }
+          throw step2Error;
         }
       });
 
@@ -789,7 +812,9 @@ export const completeSale = async (req, res) => {
         book: request.book,
         _id: { $ne: request._id },
         status: 'pending',
-      }).select('_id buyer');
+      })
+        .select('_id buyer')
+        .session(session || null);
 
       // Atomically mark the book as sold where status is 'reserved' and acceptedRequest matches this request
       updatedBook = await Book.findOneAndUpdate(
@@ -812,47 +837,66 @@ export const completeSale = async (req, res) => {
         throw error;
       }
 
-      savedRequest = await PurchaseRequest.findOneAndUpdate(
-        {
-          _id: request._id,
-          status: 'accepted',
-        },
-        {
-          $set: {
-            status: 'completed',
-          },
-        },
-        { new: true, session: session || undefined }
-      );
+      let saleCompleted = false;
+      let competingRejected = false;
 
-      if (!savedRequest) {
-        // Compensating rollback for standalone MongoDB if book was just transitioned
-        if (!session) {
-          await Book.updateOne(
-            { _id: request.book, status: 'sold', acceptedRequest: request._id },
-            { $set: { status: 'reserved' } }
-          );
+      try {
+        savedRequest = await PurchaseRequest.findOneAndUpdate(
+          {
+            _id: request._id,
+            status: 'accepted',
+          },
+          {
+            $set: {
+              status: 'completed',
+            },
+          },
+          { new: true, session: session || undefined }
+        );
+
+        if (!savedRequest) {
+          const error = new Error('COMPLETE_SALE_CONFLICT');
+          error.isConflict = true;
+          throw error;
         }
-        const error = new Error('COMPLETE_SALE_CONFLICT');
-        error.isConflict = true;
-        throw error;
-      }
+        saleCompleted = true;
 
-      // Automatically transition all other competing pending requests for this book to rejected
-      await PurchaseRequest.updateMany(
-        {
-          book: request.book,
-          _id: { $ne: request._id },
-          status: 'pending',
-        },
-        {
-          $set: {
-            status: 'rejected',
-            cancellationReason: 'The book was sold to another buyer.',
+        // Automatically transition all other competing pending requests for this book to rejected
+        await PurchaseRequest.updateMany(
+          {
+            book: request.book,
+            _id: { $ne: request._id },
+            status: 'pending',
           },
-        },
-        { session: session || undefined }
-      );
+          {
+            $set: {
+              status: 'rejected',
+              cancellationReason: 'The book was sold to another buyer.',
+            },
+          },
+          { session: session || undefined }
+        );
+        competingRejected = true;
+      } catch (saleErr) {
+        // Compensating conditional rollback for standalone MongoDB
+        if (!session) {
+          try {
+            if (saleCompleted && !competingRejected) {
+              await PurchaseRequest.updateOne(
+                { _id: request._id, status: 'completed' },
+                { $set: { status: 'accepted' } }
+              );
+            }
+            await Book.updateOne(
+              { _id: request.book, status: 'sold', acceptedRequest: request._id },
+              { $set: { status: 'reserved' } }
+            );
+          } catch (compErr) {
+            console.error('[Rollback Compensation Failure: completeSale]', compErr);
+          }
+        }
+        throw saleErr;
+      }
     });
 
     await savedRequest.populate([

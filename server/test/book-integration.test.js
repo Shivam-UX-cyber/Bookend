@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import { connectDB, disconnectDB } from '../src/config/db.js';
 import { User } from '../src/models/User.js';
 import { Book } from '../src/models/Book.js';
+import { PurchaseRequest } from '../src/models/PurchaseRequest.js';
 import { generateAuthToken } from '../src/services/tokenService.js';
 
 console.log('🧪 Starting Book Listings & Marketplace Integration Test Suite...\n');
@@ -488,7 +489,53 @@ async function runBookIntegrationTests() {
     assert.strictEqual(deletedCheck, null, 'Deleted book must not exist in DB');
     console.log('   ✓ Owner update, status toggling, and deletion executed and verified.\n');
 
-    console.log('🎉 ALL 17 BOOK MARKETPLACE INTEGRATION TEST SUITES PASSED!\n');
+    // -------------------------------------------------------------------------
+    // TEST 18: Search Indexing & Transactional Book Deletion
+    // -------------------------------------------------------------------------
+    console.log('18. Testing Search Indexing & Transactional Book Deletion Cascade...');
+    const searchBook = await Book.create({
+      title: 'Distributed Systems Patterns',
+      author: 'Martin Fowler',
+      description: 'Comprehensive guide to enterprise and distributed architecture.',
+      category: 'Computer Science',
+      condition: 'Like New',
+      priceInPaise: 75000,
+      seller: alice.user._id,
+      status: 'available',
+    });
+
+    // Test text / title search
+    const searchRes = await request(app)
+      .get('/api/books')
+      .query({ search: 'Distributed' });
+    assert.strictEqual(searchRes.status, 200);
+    assert.ok(searchRes.body.data.books.some((b) => b._id.toString() === searchBook._id.toString()));
+
+    // Create a pending request for searchBook
+    const pendingReq = await PurchaseRequest.create({
+      book: searchBook._id,
+      buyer: bob.user._id,
+      seller: alice.user._id,
+      status: 'pending',
+    });
+
+    // Delete the book via API
+    const deleteSearchRes = await request(app)
+      .delete(`/api/books/${searchBook._id}`)
+      .set('Origin', 'http://localhost:5173')
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .set('Cookie', [alice.cookie]);
+    assert.strictEqual(deleteSearchRes.status, 200);
+
+    // Verify book is deleted and pending request was atomically transitioned to rejected
+    const verifyDeleted = await Book.findById(searchBook._id);
+    assert.strictEqual(verifyDeleted, null);
+    const verifyReq = await PurchaseRequest.findById(pendingReq._id);
+    assert.strictEqual(verifyReq.status, 'rejected');
+    assert.strictEqual(verifyReq.cancellationReason, 'This listing was removed by the seller.');
+    console.log('   ✓ Search queries and transactional deletion cascade with request cleanup verified.\n');
+
+    console.log('🎉 ALL 18 BOOK MARKETPLACE INTEGRATION TEST SUITES PASSED!\n');
   } finally {
     await cleanup();
   }

@@ -70,4 +70,14 @@ purchaseRequestSchema.index(
   }
 );
 
+// Invariant: At most one purchase request can be in 'accepted' status per book at any time
+purchaseRequestSchema.index(
+  { book: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: 'accepted' },
+    name: 'unique_accepted_request_per_book',
+  }
+);
+
 export const PurchaseRequest = mongoose.model('PurchaseRequest', purchaseRequestSchema);

@@ -184,3 +184,123 @@ export const calculateRemainingCooldown = (deadlineMs) => {
   if (!deadlineMs || typeof deadlineMs !== 'number') return 0;
   return Math.max(0, Math.ceil((deadlineMs - Date.now()) / 1000));
 };
+
+export const BOOK_CATEGORIES = [
+  'Computer Science',
+  'Mathematics',
+  'Engineering',
+  'Physics',
+  'Chemistry',
+  'Biology & Life Sciences',
+  'Business & Economics',
+  'Humanities & Social Sciences',
+  'Literature & Languages',
+  'Medicine & Health',
+  'Law & Legal Studies',
+  'Other',
+];
+
+export const BOOK_CONDITIONS = ['New', 'Like New', 'Good', 'Acceptable'];
+
+/**
+ * Shared book listing validator matching backend mongoose Book schema rules.
+ *
+ * @param {{
+ *   title?: string,
+ *   author?: string,
+ *   description?: string,
+ *   category?: string,
+ *   condition?: string,
+ *   price?: string | number,
+ *   isbn?: string,
+ *   imageUrl?: string
+ * }} formData
+ * @returns {{ isValid: boolean, errors: Record<string, string> }}
+ */
+export const validateBookForm = (formData = {}) => {
+  const errors = {};
+
+  const title = (formData.title || '').trim();
+  if (!title) {
+    errors.title = 'Book title is required.';
+  } else if (title.length < 2 || title.length > 150) {
+    errors.title = 'Title must be between 2 and 150 characters.';
+  }
+
+  const author = (formData.author || '').trim();
+  if (!author) {
+    errors.author = 'Author name is required.';
+  } else if (author.length < 2 || author.length > 100) {
+    errors.author = 'Author name must be between 2 and 100 characters.';
+  }
+
+  const description = (formData.description || '').trim();
+  if (!description) {
+    errors.description = 'Book description is required.';
+  } else if (description.length < 10) {
+    errors.description = 'Description must be at least 10 characters long.';
+  } else if (description.length > 2000) {
+    errors.description = 'Description cannot exceed 2000 characters.';
+  }
+
+  const category = (formData.category || '').trim();
+  if (!category) {
+    errors.category = 'Please select an academic category.';
+  } else if (!BOOK_CATEGORIES.includes(category)) {
+    errors.category = 'Please select a valid academic category.';
+  }
+
+  const condition = (formData.condition || '').trim();
+  if (!condition) {
+    errors.condition = 'Please select a book condition.';
+  } else if (!BOOK_CONDITIONS.includes(condition)) {
+    errors.condition = 'Please select a valid condition (New, Like New, Good, Acceptable).';
+  }
+
+  const rawPrice =
+    formData.price !== undefined && formData.price !== null ? String(formData.price).trim() : '';
+  const priceNum = Number(rawPrice);
+  if (!rawPrice) {
+    errors.price = 'Selling price is required.';
+  } else if (isNaN(priceNum) || !Number.isFinite(priceNum)) {
+    errors.price = 'Price must be a valid number.';
+  } else if (priceNum < 1) {
+    errors.price = 'Minimum price is ₹1.';
+  } else if (priceNum > 100000) {
+    errors.price = 'Price cannot exceed ₹1,00,000.';
+  } else {
+    const parts = rawPrice.split('.');
+    if (parts.length === 2 && parts[1].length > 2) {
+      errors.price = 'Price cannot have more than 2 decimal places.';
+    }
+  }
+
+  const isbn = (formData.isbn || '').trim();
+  if (isbn) {
+    const cleanIsbn = isbn.replace(/[-\s]/g, '');
+    if (
+      !/^(97[89])?\d{9}[\dX]$/i.test(cleanIsbn) ||
+      (cleanIsbn.length !== 10 && cleanIsbn.length !== 13)
+    ) {
+      errors.isbn = 'ISBN must be a valid 10 or 13-digit standard book identifier.';
+    }
+  }
+
+  const imageUrl = (formData.imageUrl || '').trim();
+  if (imageUrl) {
+    if (!/^https?:\/\/.+/i.test(imageUrl)) {
+      errors.imageUrl = 'Image URL must start with http:// or https://';
+    } else {
+      try {
+        new URL(imageUrl);
+      } catch {
+        errors.imageUrl = 'Please enter a valid web URL.';
+      }
+    }
+  }
+
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors,
+  };
+};

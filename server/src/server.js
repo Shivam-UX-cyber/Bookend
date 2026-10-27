@@ -3,7 +3,8 @@ import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { config, validateEnv } from './config/env.js';
-import { connectDB } from './config/db.js';
+import { connectDB, disconnectDB } from './config/db.js';
+import { sseManager } from './services/notificationService.js';
 import authRoutes from './routes/authRoutes.js';
 import bookRoutes from './routes/bookRoutes.js';
 import purchaseRequestRoutes from './routes/purchaseRequestRoutes.js';
@@ -167,19 +168,69 @@ export const startServer = async () => {
     );
   });
 
-  // Graceful shutdown handling
-  const shutdown = (signal) => {
-    console.log(`\n[Server] Received ${signal}. Shutting down gracefully...`);
-    server.close(() => {
-      console.log('[Server] HTTP server closed.');
-      process.exit(0);
-    });
-  };
-
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown(server, 'SIGINT'));
+  process.on('SIGTERM', () => gracefulShutdown(server, 'SIGTERM'));
 
   return server;
+};
+
+/**
+ * Bounded Graceful Shutdown Handler
+ *
+ * 1. Establishes a hard timeout fallback.
+ * 2. Closes active SSE client streams to unblock server.close().
+ * 3. Stops accepting new requests and drains in-flight requests.
+ * 4. Cleanly disconnects the database connection.
+ */
+export const gracefulShutdown = async (server, signal, { timeoutMs = 10000, logger = console, exitProcess = true } = {}) => {
+  logger.log(`\n[Server] Received ${signal}. Starting bounded graceful shutdown...`);
+
+  let forceTimer = null;
+  if (exitProcess) {
+    forceTimer = setTimeout(() => {
+      logger.error(`[Server] Graceful shutdown timed out after ${timeoutMs}ms. Forcing process exit.`);
+      process.exit(1);
+    }, timeoutMs);
+    if (forceTimer.unref) forceTimer.unref();
+  }
+
+  // 1. Terminate all active Server-Sent Events (SSE) connections
+  try {
+    sseManager.closeAll();
+    logger.log('[Server] Active SSE streams closed.');
+  } catch (sseErr) {
+    logger.error('[Server Error: SSE stream draining failed]', sseErr.message);
+  }
+
+  // 2. Stop accepting new HTTP connections and drain in-flight requests
+  try {
+    if (server && server.listening) {
+      await new Promise((resolve, reject) => {
+        server.close((err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+      logger.log('[Server] HTTP listener closed and in-flight requests drained.');
+    }
+  } catch (closeErr) {
+    logger.error('[Server Error: HTTP close failed]', closeErr.message);
+  }
+
+  // 3. Cleanly disconnect MongoDB database connection
+  try {
+    await disconnectDB();
+    logger.log('[Server] MongoDB connection closed cleanly.');
+  } catch (dbErr) {
+    logger.error('[Server Error: Database disconnection failed]', dbErr.message);
+  }
+
+  if (forceTimer) clearTimeout(forceTimer);
+
+  logger.log('[Server] Graceful shutdown completed cleanly.');
+  if (exitProcess) {
+    process.exit(0);
+  }
 };
 
 // Start server automatically only when run directly (not when imported in tests)

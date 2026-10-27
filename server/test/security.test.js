@@ -167,7 +167,48 @@ async function runTests() {
   config.cookieSecure = prevSecure;
   console.log('   ✓ Cross-site cookie options correctly configure SameSite=none and Secure: true in production.\n');
 
-  console.log('🎉 ALL 10 SECURITY & CRYPTOGRAPHY TESTS PASSED!\n');
+  // Test 11: Auth Middleware Cross-Site Cookie Consistency
+  console.log('11. Testing Auth Middleware Cookie Clearing Consistency...');
+  const { getClearCookieOptions: getCanonicalClear } = await import('../src/utils/cookieHelper.js');
+
+  config.nodeEnv = 'production';
+  config.cookieSameSite = 'none';
+  config.cookieSecure = true;
+  const canonicalClear = getCanonicalClear();
+  assert.strictEqual(canonicalClear.sameSite, 'none', 'Canonical clear cookie must match SameSite=none');
+  assert.strictEqual(canonicalClear.secure, true, 'Canonical clear cookie must match Secure=true');
+  config.nodeEnv = prevEnv;
+  config.cookieSameSite = prevSameSite;
+  config.cookieSecure = prevSecure;
+  console.log('   ✓ Canonical cookie helper guarantees consistent cross-site cookie clearing attributes.\n');
+
+  // Test 12: Transaction Helper Standalone Capability Caching
+  console.log('12. Testing Transaction Helper Capability Caching...');
+  const {
+    runWithOptionalTransaction,
+    resetTransactionSupportCache,
+    setTransactionSupport,
+    getTransactionSupport,
+  } = await import('../src/utils/transactionHelper.js');
+
+  resetTransactionSupportCache();
+  assert.strictEqual(getTransactionSupport(), null, 'Initial cache must be null (unprobed)');
+
+  // When standalone is cached (false), callback must execute with session = null
+  setTransactionSupport(false);
+  assert.strictEqual(getTransactionSupport(), false, 'Cache must report false');
+
+  let executedSession = undefined;
+  await runWithOptionalTransaction(async (session) => {
+    executedSession = session;
+    return 'standalone_ok';
+  });
+  assert.strictEqual(executedSession, null, 'Standalone execution must directly supply session = null without re-attempting transaction');
+
+  resetTransactionSupportCache();
+  console.log('   ✓ Transaction helper successfully caches standalone capability and skips redundant transaction starts.\n');
+
+  console.log('🎉 ALL 12 SECURITY, CRYPTOGRAPHY & TRANSACTION TESTS PASSED!\n');
 }
 
 runTests().catch((err) => {

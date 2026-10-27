@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { Book, BOOK_CATEGORIES, BOOK_CONDITIONS, BOOK_STATUSES } from '../models/Book.js';
 import { PurchaseRequest } from '../models/PurchaseRequest.js';
 import { notifySafely } from '../services/notificationService.js';
+import { runWithOptionalTransaction } from '../utils/transactionHelper.js';
 
 /**
  * Escapes regex special characters to prevent ReDoS or malformed query attacks
@@ -372,21 +373,71 @@ export const updateBookStatus = async (req, res) => {
       });
     }
 
-    // Atomic conditional update to guard against concurrent reservation
-    const updatedBook = await Book.findOneAndUpdate(
-      {
-        _id: id,
-        status: { $in: ['available', 'sold'] },
-        acceptedRequest: null,
-      },
-      {
-        $set: {
-          status: newStatus,
+    let updatedBook = null;
+    let pendingRequests = [];
+
+    await runWithOptionalTransaction(async (session) => {
+      // Atomic conditional update to guard against concurrent reservation
+      updatedBook = await Book.findOneAndUpdate(
+        {
+          _id: id,
+          status: { $in: ['available', 'sold'] },
           acceptedRequest: null,
         },
-      },
-      { new: true }
-    );
+        {
+          $set: {
+            status: newStatus,
+            acceptedRequest: null,
+          },
+        },
+        { new: true, session: session || undefined }
+      );
+
+      if (!updatedBook) {
+        return;
+      }
+
+      // If seller manually marks as sold, reject any pending purchase requests
+      if (newStatus === 'sold') {
+        pendingRequests = await PurchaseRequest.find({
+          book: id,
+          status: 'pending',
+        })
+          .select('_id buyer')
+          .session(session || null);
+
+        if (pendingRequests.length > 0) {
+          try {
+            await PurchaseRequest.updateMany(
+              {
+                book: id,
+                status: 'pending',
+              },
+              {
+                $set: {
+                  status: 'rejected',
+                  cancellationReason: 'The seller marked this listing as sold.',
+                },
+              },
+              { session: session || undefined }
+            );
+          } catch (updateErr) {
+            // Compensate for standalone MongoDB: revert book to available if requests couldn't be rejected
+            if (!session && updatedBook) {
+              try {
+                await Book.updateOne(
+                  { _id: id, status: 'sold', acceptedRequest: null },
+                  { $set: { status: 'available' } }
+                );
+              } catch (compErr) {
+                console.error('[Rollback Error: updateBookStatus]', compErr);
+              }
+            }
+            throw updateErr;
+          }
+        }
+      }
+    });
 
     if (!updatedBook) {
       return res.status(400).json({
@@ -395,26 +446,7 @@ export const updateBookStatus = async (req, res) => {
       });
     }
 
-    // If seller manually marks as sold, reject any pending purchase requests and notify buyers
-    if (newStatus === 'sold') {
-      const pendingRequests = await PurchaseRequest.find({
-        book: id,
-        status: 'pending',
-      }).select('_id buyer');
-
-      await PurchaseRequest.updateMany(
-        {
-          book: id,
-          status: 'pending',
-        },
-        {
-          $set: {
-            status: 'rejected',
-            cancellationReason: 'The seller marked this listing as sold.',
-          },
-        }
-      );
-
+    if (newStatus === 'sold' && pendingRequests.length > 0) {
       for (const pr of pendingRequests) {
         await notifySafely({
           recipient: pr.buyer,
@@ -479,11 +511,59 @@ export const deleteBook = async (req, res) => {
       });
     }
 
-    // Atomic conditional deletion to prevent deleting a book that became reserved concurrently
-    const deletedBook = await Book.findOneAndDelete({
-      _id: id,
-      status: 'available',
-      acceptedRequest: null,
+    let deletedBook = null;
+    let pendingRequests = [];
+
+    await runWithOptionalTransaction(async (session) => {
+      // Atomic conditional deletion to prevent deleting a book that became reserved concurrently
+      deletedBook = await Book.findOneAndDelete(
+        {
+          _id: id,
+          status: 'available',
+          acceptedRequest: null,
+        },
+        { session: session || undefined }
+      );
+
+      if (!deletedBook) {
+        return;
+      }
+
+      // Clean up any pending purchase requests for this deleted book so they are not left orphaned
+      pendingRequests = await PurchaseRequest.find({
+        book: id,
+        status: 'pending',
+      })
+        .select('_id buyer')
+        .session(session || null);
+
+      if (pendingRequests.length > 0) {
+        try {
+          await PurchaseRequest.updateMany(
+            {
+              book: id,
+              status: 'pending',
+            },
+            {
+              $set: {
+                status: 'rejected',
+                cancellationReason: 'This listing was removed by the seller.',
+              },
+            },
+            { session: session || undefined }
+          );
+        } catch (updateErr) {
+          // Compensate for standalone MongoDB: restore deleted book document if request cleanup failed
+          if (!session && deletedBook) {
+            try {
+              await Book.create([deletedBook.toObject()]);
+            } catch (compErr) {
+              console.error('[Rollback Error: deleteBook restoration failed]', compErr);
+            }
+          }
+          throw updateErr;
+        }
+      }
     });
 
     if (!deletedBook) {
@@ -492,25 +572,6 @@ export const deleteBook = async (req, res) => {
         message: 'Cannot delete listing: book is no longer available or has an active reservation.',
       });
     }
-
-    // Clean up any pending purchase requests for this deleted book so they are not left orphaned
-    const pendingRequests = await PurchaseRequest.find({
-      book: id,
-      status: 'pending',
-    }).select('_id buyer');
-
-    await PurchaseRequest.updateMany(
-      {
-        book: id,
-        status: 'pending',
-      },
-      {
-        $set: {
-          status: 'rejected',
-          cancellationReason: 'This listing was removed by the seller.',
-        },
-      }
-    );
 
     for (const pr of pendingRequests) {
       await notifySafely({

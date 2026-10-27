@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node test/security.test.js && node test/auth-integration.test.js && node test/book-integration.test.js && node test/purchase-request-integration.test.js && node test/profile-integration.test.js && node test/notification-integration.test.js && node test/proxy-and-otp-fix.test.js"
+    "migrate:indexes": "node src/scripts/migrateIndexes.js",
+    "test": "node test/security.test.js && node test/auth-integration.test.js && node test/book-integration.test.js && node test/purchase-request-integration.test.js && node test/profile-integration.test.js && node test/notification-integration.test.js && node test/proxy-and-otp-fix.test.js && node test/index-migration.test.js && node test/transaction-integrity.test.js && node test/shutdown-and-csrf.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -20,7 +21,6 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.12.1",
-    "nodemailer": "^10.1.0",
     "resend": "^6.34.1"
   },
   "devDependencies": {

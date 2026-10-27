@@ -1,11 +1,22 @@
-name: Bookend CI/CD Pipeline
+name: Bookend Backend CI/CD Pipeline
 
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - 'server/**'
+      - '.github/workflows/bookend-ci-cd.yml'
   pull_request:
     branches: [ main, master ]
+    paths:
+      - 'server/**'
+      - '.github/workflows/bookend-ci-cd.yml'
   workflow_dispatch:
+
+# Prevent concurrent or out-of-order deployments to production
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
 
 # Grant minimum required default permissions across jobs
 permissions:
@@ -13,36 +24,7 @@ permissions:
 
 jobs:
   # ============================================================================
-  # 1. Frontend Continuous Integration
-  # ============================================================================
-  frontend-ci:
-    name: Frontend CI (Test & Build)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js 20 LTS
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: client/package-lock.json
-
-      - name: Install dependencies (clean installation)
-        run: npm ci
-        working-directory: client
-
-      - name: Run frontend unit tests
-        run: npm test
-        working-directory: client
-
-      - name: Build frontend production bundle
-        run: npm run build
-        working-directory: client
-
-  # ============================================================================
-  # 2. Backend Continuous Integration
+  # 1. Backend Continuous Integration
   # ============================================================================
   backend-ci:
     name: Backend CI (Security & Integration Tests)
@@ -74,10 +56,10 @@ jobs:
           COOKIE_SECURE: false
 
   # ============================================================================
-  # 3. Pull Request Docker Validation (Test Image Build without publishing)
+  # 2. Pull Request Docker Validation (Test Image Build without publishing)
   # ============================================================================
   docker-pr-validation:
-    name: Validate Docker Build (PR)
+    name: Validate Backend Docker Build (PR)
     needs: [ backend-ci ]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -97,12 +79,12 @@ jobs:
           tags: bookend-backend:pr-test
 
   # ============================================================================
-  # 4. Publish to Docker Hub & Trigger Render Deployment (Default Branch Only)
+  # 3. Publish to Docker Hub & Trigger Render Deployment (Default Branch Only)
   # ============================================================================
   publish-and-deploy:
-    name: Publish Image & Deploy to Render
-    needs: [ frontend-ci, backend-ci ]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    name: Publish Backend Image & Deploy to Render
+    needs: [ backend-ci ]
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -151,6 +133,11 @@ jobs:
             exit 1
           fi
 
+          if [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "Error: DOCKERHUB_TOKEN secret is not configured in repository."
+            exit 1
+          fi
+
           # Target the exact immutable commit-SHA-tagged image published in the previous step
           IMAGE_URI="docker.io/${{ vars.DOCKERHUB_USERNAME }}/bookend-backend:${{ github.sha }}"
           ENCODED_IMAGE_URI=$(node -e "console.log(encodeURIComponent(process.argv[1]))" "$IMAGE_URI")
@@ -162,13 +149,15 @@ jobs:
             DEPLOY_URL="${HOOK_URL}?imgURL=${ENCODED_IMAGE_URI}"
           fi
 
-          echo "Initiating Render deployment for image: $IMAGE_URI"
+          echo "Initiating Render backend deployment for image: $IMAGE_URI"
 
-          # Perform deployment webhook request without printing sensitive credentials
-          HTTP_RESPONSE=$(curl -s -o response.txt -w "%{http_code}" -X POST "$DEPLOY_URL")
+          # Perform deployment webhook request with strict timeouts and error capture
+          HTTP_RESPONSE=$(curl -sS --connect-timeout 15 --max-time 60 -o response.txt -w "%{http_code}" -X POST "$DEPLOY_URL" || true)
 
           if [ "$HTTP_RESPONSE" -ge 200 ] && [ "$HTTP_RESPONSE" -lt 300 ]; then
-            echo "Render deployment triggered successfully (HTTP $HTTP_RESPONSE)."
+            echo "Render backend deployment triggered successfully (HTTP $HTTP_RESPONSE)."
+            echo "Note: The Render webhook confirms deployment initiation only."
+            echo "Verify live container health, build logs, and service status in the Render Dashboard."
           else
             echo "Error: Render deployment hook returned failure HTTP status: $HTTP_RESPONSE"
             if [ -f response.txt ]; then

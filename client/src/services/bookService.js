@@ -1,21 +1,6 @@
 import { apiRequest } from './api.js';
 
-export const BOOK_CATEGORIES = [
-  'Computer Science',
-  'Mathematics',
-  'Engineering',
-  'Physics',
-  'Chemistry',
-  'Biology & Life Sciences',
-  'Business & Economics',
-  'Humanities & Social Sciences',
-  'Literature & Languages',
-  'Medicine & Health',
-  'Law & Legal Studies',
-  'Other',
-];
-
-export const BOOK_CONDITIONS = ['New', 'Like New', 'Good', 'Acceptable'];
+export { BOOK_CATEGORIES, BOOK_CONDITIONS } from '../utils/validation.js';
 
 export const bookService = {
   /**

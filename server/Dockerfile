@@ -43,5 +43,5 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD node -e "const port = process.env.PORT || 5000; require('http').get('http://127.0.0.1:' + port + '/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"
 
-# Start the application using standard npm start
-CMD ["npm", "start"]
+# Direct node invocation as PID 1 guarantees graceful SIGTERM / SIGINT shutdown
+CMD ["node", "src/server.js"]

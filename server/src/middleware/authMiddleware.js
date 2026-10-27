@@ -1,12 +1,6 @@
 import { verifyAuthToken } from '../services/tokenService.js';
 import { User } from '../models/User.js';
-
-const getClearAuthCookieOptions = () => ({
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-  path: '/',
-});
+import { getClearCookieOptions } from '../utils/cookieHelper.js';
 
 export const requireAuth = async (req, res, next) => {
   try {
@@ -26,7 +20,7 @@ export const requireAuth = async (req, res, next) => {
       decoded = verifyAuthToken(token);
     } catch (err) {
       // Clear invalid cookie
-      res.clearCookie('authToken', getClearAuthCookieOptions());
+      res.clearCookie('authToken', getClearCookieOptions());
 
       return res.status(401).json({
         success: false,
@@ -37,7 +31,7 @@ export const requireAuth = async (req, res, next) => {
     // Fetch user from DB
     const user = await User.findById(decoded.id);
     if (!user) {
-      res.clearCookie('authToken', getClearAuthCookieOptions());
+      res.clearCookie('authToken', getClearCookieOptions());
       return res.status(401).json({
         success: false,
         message: 'User account not found.',
@@ -46,7 +40,7 @@ export const requireAuth = async (req, res, next) => {
 
     // Enforce token version matching (invalidates old sessions if password changed)
     if (user.tokenVersion !== decoded.tokenVersion) {
-      res.clearCookie('authToken', getClearAuthCookieOptions());
+      res.clearCookie('authToken', getClearCookieOptions());
       return res.status(401).json({
         success: false,
         message: 'Session has been invalidated due to a security update. Please log in again.',

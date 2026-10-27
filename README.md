@@ -1,15 +1,16 @@
 # Bookend — Campus Second-Hand Book Marketplace
 
-Bookend is a full-stack, peer-to-peer campus textbook marketplace designed for university students. Students can discover course textbooks, list books for sale, submit purchase requests with in-person handover coordination, manage listings, view student profiles, and receive real-time notifications via Server-Sent Events.
+Bookend is a full-stack, peer-to-peer campus textbook marketplace engineered for university students. Students can discover course textbooks, list books for sale, submit purchase requests with in-person handover coordination, manage active listings, inspect student seller profiles, and receive real-time notifications via Server-Sent Events (SSE).
 
 ---
 
 ## Architecture Overview
 
-- **Frontend:** React 19, Vite, React Router 7, Vanilla CSS design token system (multi-stage Docker container deployed to Render via Nginx Alpine).
-- **Backend:** Node.js 20 LTS, Express 4, Mongoose 8, Helmet, CORS, CSRF defense, Cookie session authentication with JWT and `tokenVersion` revocation (Render Docker container deployment).
-- **Database:** MongoDB Atlas with atomic conditional updates, concurrency race protection, and integer paise currency boundaries.
-- **CI/CD Pipeline:** Dual independent GitHub Actions pipelines (149 tests across frontend and backend), multi-stage Docker builds, Docker Hub registry publication, and automated Render deployment triggers.
+- **Frontend:** React 19, Vite 6 (route-level code splitting), React Router 7, Obsidian Monochrome design system, served via Alpine Nginx with dynamic `$PORT` routing on Render.
+- **Backend:** Node.js 20 LTS, Express 4.21, Mongoose 8.12, Helmet security headers, CORS origin whitelist, custom header CSRF defense, and `HttpOnly` cookie session authentication with JWT and `tokenVersion` revocation.
+- **Database:** MongoDB Atlas with atomic conditional updates, partial unique indexes for single-reservation integrity, integer paise currency storage, and transactional consistency.
+- **Email Delivery:** Resend HTTPS API SDK with automated retries and zero-cooldown delivery failure recovery.
+- **CI/CD & Containers:** Independent GitHub Actions pipelines gating releases with 192 automated tests (167 backend + 25 frontend), multi-stage Docker builds, Docker Hub registry publication, and Render deployment webhooks.
 
 ---
 
@@ -18,93 +19,84 @@ Bookend is a full-stack, peer-to-peer campus textbook marketplace designed for u
 ```
 ├── .github/
 │   └── workflows/
-│       ├── bookend-ci-cd.yml          # Backend GitHub Actions CI/CD Pipeline
-│       └── bookend-frontend-cd.yml    # Frontend GitHub Actions CI/CD Pipeline
-├── client/                            # React 19 + Vite frontend
+│       ├── bookend-ci-cd.yml          # Backend CI/CD Pipeline (Docker Hub + Render)
+│       └── bookend-frontend-cd.yml    # Frontend CI/CD Pipeline (Docker Hub + Render)
+├── client/                            # React 19 + Vite frontend application
 │   ├── src/                           # Components, pages, context, styles
-│   ├── test/                          # Frontend unit test suites
-│   ├── Dockerfile                     # Multi-stage production container build (Nginx)
-│   ├── nginx.conf.template            # Runtime dynamic port template & SPA routing
+│   ├── test/                          # Frontend unit test suites (25 tests)
+│   ├── Dockerfile                     # Multi-stage production container (Node + Nginx)
+│   ├── nginx.conf.template            # Dynamic port template & SPA fallback
 │   ├── .dockerignore                  # Docker build context exclusions
 │   ├── .env.example                   # Frontend environment template
 │   └── package.json
-├── server/                            # Express 4 + Node.js backend
-│   ├── src/                           # Controllers, models, routes, services
-│   ├── test/                          # Security & integration test suites
-│   ├── Dockerfile                     # Multi-stage production container build (Node)
+├── server/                            # Node.js + Express backend service
+│   ├── src/                           # Controllers, models, routes, services, migration scripts
+│   ├── test/                          # Security & integration test suites (167 tests)
+│   ├── Dockerfile                     # Multi-stage production container (Node 20 runtime)
 │   ├── .dockerignore                  # Docker build context exclusions
 │   ├── .env.example                   # Backend environment template
 │   └── package.json
-└── docs/                              # Engineering & operational documentation
-    ├── deployment-guide.md            # Comprehensive deployment and operations guide
-    ├── bookend-engineering-audit.md
-    ├── bookend-fix-report.md
-    ├── bookend-test-report.md
-    ├── bookend-architecture.md
-    └── bookend-production-readiness.md
+├── docs/                              # Canonical engineering & operational documentation
+│   ├── architecture.md                # System boundaries, data schemas, invariants
+│   ├── development.md                 # Prerequisites, local setup, troubleshooting
+│   ├── security.md                    # Verified security controls, limits, threat defense
+│   ├── deployment.md                  # Docker builds, registry, Render, smoke tests
+│   └── testing.md                     # Test execution, suite breakdown, coverage gaps
+└── CHANGELOG.md                       # Release notes and version history
 ```
 
 ---
 
 ## Local Development Quickstart
 
-### 1. Backend Setup
+### Prerequisites
+- Node.js v20.x LTS or higher
+- npm v10.x or higher
+- MongoDB instance (local or MongoDB Atlas connection string)
+- Git
+
+### 1. Start the Backend
 ```bash
 cd server
 cp .env.example .env
 npm install
 npm run dev
 ```
-Backend runs at `http://localhost:5000` (Healthcheck: `http://localhost:5000/api/health`).
+- API server runs at: `http://localhost:5000`
+- Health check endpoint: `http://localhost:5000/api/health`
 
-### 2. Frontend Setup
+### 2. Start the Frontend
+In a separate terminal:
 ```bash
 cd client
 cp .env.example .env
 npm install
 npm run dev
 ```
-Frontend runs at `http://localhost:5173`.
+- Frontend runs at: `http://localhost:5173`
 
 ---
 
-## Automated Test Suites
+## Essential Commands
 
-### Run All Backend Tests (128 Tests across 6 Suites)
-```bash
-cd server
-npm test
-```
-Tests cover:
-- Injection defense, NoSQL prevention, Unicode names, and bcrypt 72-byte limits (`test/security.test.js`)
-- Authentication, session revocation, OTP cooldowns, and anti-enumeration (`test/auth-integration.test.js`)
-- Book listing lifecycle, integer paise pricing, and public DTO sanitization (`test/book-integration.test.js`)
-- Purchase request concurrency races, double-click deduplication, and atomic rollbacks (`test/purchase-request-integration.test.js`)
-- Student profile serialization and privacy preferences (`test/profile-integration.test.js`)
-- Notification system, unread count deduplication, and isolated SSE streams (`test/notification-integration.test.js`)
-
-### Run All Frontend Tests (21 Tests)
-```bash
-cd client
-npm test
-```
-
-### Production Bundling & Container Builds
-```bash
-# Frontend Vite build
-cd client && npm run build
-
-# Frontend Docker container build (Node.js 20 build stage + Nginx 1.27 runtime)
-docker build -t bookend-frontend ./client
-
-# Backend Docker container build (Node.js 20 production runtime)
-docker build -t bookend-backend ./server
-```
+| Task | Backend (`server/`) | Frontend (`client/`) |
+| :--- | :--- | :--- |
+| **Install Dependencies** | `npm install` | `npm install` |
+| **Start Development Server** | `npm run dev` | `npm run dev` |
+| **Migrate & Verify Indexes** | `npm run migrate:indexes` | N/A |
+| **Execute Test Suites** | `npm test` (167 tests) | `npm test` (25 tests) |
+| **Production Build** | N/A (Node runtime) | `npm run build` |
+| **Build Docker Container** | `docker build -t bookend-backend ./server` | `docker build -t bookend-frontend ./client` |
 
 ---
 
-## Production Deployment & CI/CD
+## Canonical Documentation Guides
 
-For complete step-by-step instructions on setting up GitHub Actions secrets, Docker Hub repositories, Render web services for both frontend and backend, refer to:
+For in-depth operational and engineering specifications, consult the dedicated guides:
 
-👉 **[Production Deployment & Operations Guide](docs/deployment-guide.md)**
+- 📐 **[System Architecture & Data Flows](docs/architecture.md)**: Component boundaries, data schemas, and lifecycle state machines.
+- 💻 **[Local Development & Troubleshooting](docs/development.md)**: Detailed configuration, step-by-step setup, and common fixes.
+- 🛡️ **[Security Architecture & Threat Defense](docs/security.md)**: Verified security controls, session invalidation, and rate limiting.
+- 🚀 **[Production Deployment & Operations Guide](docs/deployment.md)**: Docker builds, registry tags, Render web services, smoke tests, and rollback.
+- 🧪 **[Automated Testing & Verification Guide](docs/testing.md)**: Comprehensive test breakdown (192 tests), assertions, and manual verification items.
+- 📜 **[Changelog & Release Notes](CHANGELOG.md)**: Summary of updates, fixes, and architectural improvements.

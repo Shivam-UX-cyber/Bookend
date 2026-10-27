@@ -12,6 +12,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { bookService, BOOK_CATEGORIES, BOOK_CONDITIONS, formatINR } from '../services/bookService';
+import { validateBookForm } from '../utils/validation';
 import { Alert } from '../components/Alert';
 
 export const CreateBookPage = () => {
@@ -33,74 +34,9 @@ export const CreateBookPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validateClientSide = () => {
-    const errors = {};
-
-    if (!formData.title.trim()) {
-      errors.title = 'Book title is required.';
-    } else if (formData.title.trim().length < 2 || formData.title.trim().length > 150) {
-      errors.title = 'Title must be between 2 and 150 characters.';
-    }
-
-    if (!formData.author.trim()) {
-      errors.author = 'Author name is required.';
-    } else if (formData.author.trim().length < 2 || formData.author.trim().length > 100) {
-      errors.author = 'Author name must be between 2 and 100 characters.';
-    }
-
-    if (!formData.description.trim()) {
-      errors.description = 'Book description is required.';
-    } else if (formData.description.trim().length < 10) {
-      errors.description = 'Description must be at least 10 characters long.';
-    } else if (formData.description.trim().length > 2000) {
-      errors.description = 'Description cannot exceed 2000 characters.';
-    }
-
-    if (!formData.category) {
-      errors.category = 'Please select an academic category.';
-    }
-
-    if (!formData.condition) {
-      errors.condition = 'Please select a book condition.';
-    }
-
-    const priceNum = Number(formData.price);
-    if (!formData.price || formData.price.trim() === '') {
-      errors.price = 'Selling price is required.';
-    } else if (isNaN(priceNum) || !Number.isFinite(priceNum)) {
-      errors.price = 'Price must be a valid number.';
-    } else if (priceNum < 1) {
-      errors.price = 'Minimum price is ₹1.';
-    } else if (priceNum > 100000) {
-      errors.price = 'Price cannot exceed ₹1,00,000.';
-    } else {
-      const parts = formData.price.split('.');
-      if (parts.length === 2 && parts[1].length > 2) {
-        errors.price = 'Price cannot have more than 2 decimal places.';
-      }
-    }
-
-    if (formData.isbn.trim()) {
-      const cleanIsbn = formData.isbn.trim().replace(/[-\s]/g, '');
-      if (!/^(97[89])?\d{9}[\dX]$/i.test(cleanIsbn) || (cleanIsbn.length !== 10 && cleanIsbn.length !== 13)) {
-        errors.isbn = 'ISBN must be a valid 10 or 13-digit standard book identifier.';
-      }
-    }
-
-    if (formData.imageUrl.trim()) {
-      const url = formData.imageUrl.trim();
-      if (!/^https?:\/\/.+/i.test(url)) {
-        errors.imageUrl = 'Image URL must start with http:// or https://';
-      } else {
-        try {
-          new URL(url);
-        } catch {
-          errors.imageUrl = 'Please enter a valid web URL.';
-        }
-      }
-    }
-
+    const { isValid, errors } = validateBookForm(formData);
     setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+    return isValid;
   };
 
   const handleChange = (e) => {

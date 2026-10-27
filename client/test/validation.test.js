@@ -6,6 +6,7 @@ import {
   validateGmail,
   validateInternationalName,
   calculateRemainingCooldown,
+  validateBookForm,
 } from '../src/utils/validation.js';
 
 test('1. UTF-8 Byte Length Calculation without Buffer', () => {
@@ -143,4 +144,73 @@ test('6. OTP Slot Preservation Logic', () => {
   assert.strictEqual(deletedSlot1[3], '4');
   assert.strictEqual(deletedSlot1[4], '5');
   assert.strictEqual(deletedSlot1[5], '6');
+});
+
+test('7. Shared Book Listing Form Validation', () => {
+  const validBook = {
+    title: 'Operating System Concepts',
+    author: 'Silberschatz, Galvin, Gagne',
+    description: 'Tenth edition textbook covering virtualization, memory management, and file systems.',
+    category: 'Computer Science',
+    condition: 'Good',
+    price: '450.50',
+    isbn: '978-1-118-06333-0',
+    imageUrl: 'https://images.example.com/books/os.jpg',
+  };
+
+  const validResult = validateBookForm(validBook);
+  assert.strictEqual(validResult.isValid, true);
+  assert.deepStrictEqual(validResult.errors, {});
+
+  // Required fields missing
+  const emptyResult = validateBookForm({});
+  assert.strictEqual(emptyResult.isValid, false);
+  assert.strictEqual(emptyResult.errors.title, 'Book title is required.');
+  assert.strictEqual(emptyResult.errors.author, 'Author name is required.');
+  assert.strictEqual(emptyResult.errors.description, 'Book description is required.');
+  assert.strictEqual(emptyResult.errors.category, 'Please select an academic category.');
+  assert.strictEqual(emptyResult.errors.condition, 'Please select a book condition.');
+  assert.strictEqual(emptyResult.errors.price, 'Selling price is required.');
+
+  // Category and condition validity against schema enums
+  assert.strictEqual(
+    validateBookForm({ ...validBook, category: 'Invalid Category Not In List' }).errors.category,
+    'Please select a valid academic category.'
+  );
+  assert.strictEqual(
+    validateBookForm({ ...validBook, condition: 'Damaged Beyond Repair' }).errors.condition,
+    'Please select a valid condition (New, Like New, Good, Acceptable).'
+  );
+
+  // Title boundaries
+  assert.strictEqual(validateBookForm({ ...validBook, title: 'A' }).errors.title, 'Title must be between 2 and 150 characters.');
+  assert.strictEqual(validateBookForm({ ...validBook, title: 'A'.repeat(151) }).errors.title, 'Title must be between 2 and 150 characters.');
+
+  // Author boundaries
+  assert.strictEqual(validateBookForm({ ...validBook, author: 'B' }).errors.author, 'Author name must be between 2 and 100 characters.');
+  assert.strictEqual(validateBookForm({ ...validBook, author: 'B'.repeat(101) }).errors.author, 'Author name must be between 2 and 100 characters.');
+
+  // Description boundaries (<10 or >2000)
+  assert.strictEqual(validateBookForm({ ...validBook, description: 'Too short' }).errors.description, 'Description must be at least 10 characters long.');
+  assert.strictEqual(validateBookForm({ ...validBook, description: 'C'.repeat(2001) }).errors.description, 'Description cannot exceed 2000 characters.');
+
+  // Price boundaries
+  assert.strictEqual(validateBookForm({ ...validBook, price: '0' }).errors.price, 'Minimum price is ₹1.');
+  assert.strictEqual(validateBookForm({ ...validBook, price: '-50' }).errors.price, 'Minimum price is ₹1.');
+  assert.strictEqual(validateBookForm({ ...validBook, price: '100001' }).errors.price, 'Price cannot exceed ₹1,00,000.');
+  assert.strictEqual(validateBookForm({ ...validBook, price: 'abc' }).errors.price, 'Price must be a valid number.');
+  assert.strictEqual(validateBookForm({ ...validBook, price: '50.999' }).errors.price, 'Price cannot have more than 2 decimal places.');
+
+  // Numeric price format
+  assert.strictEqual(validateBookForm({ ...validBook, price: 500 }).isValid, true);
+
+  // ISBN formats (optional, but validated if provided)
+  assert.strictEqual(validateBookForm({ ...validBook, isbn: '' }).isValid, true);
+  assert.strictEqual(validateBookForm({ ...validBook, isbn: '0-201-63361-2' }).isValid, true); // 10-digit ISBN
+  assert.strictEqual(validateBookForm({ ...validBook, isbn: '12345' }).errors.isbn, 'ISBN must be a valid 10 or 13-digit standard book identifier.');
+
+  // Image URL formats (optional, but validated if provided)
+  assert.strictEqual(validateBookForm({ ...validBook, imageUrl: '' }).isValid, true);
+  assert.strictEqual(validateBookForm({ ...validBook, imageUrl: 'ftp://example.com/pic.png' }).errors.imageUrl, 'Image URL must start with http:// or https://');
+  assert.strictEqual(validateBookForm({ ...validBook, imageUrl: 'http://not a valid url' }).errors.imageUrl, 'Please enter a valid web URL.');
 });

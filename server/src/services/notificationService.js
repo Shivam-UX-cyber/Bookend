@@ -86,6 +86,23 @@ export const sseManager = {
   },
 
   /**
+   * Gracefully terminate all active SSE connections during server shutdown
+   */
+  closeAll() {
+    for (const [userIdStr, clientSet] of sseClients.entries()) {
+      for (const res of clientSet) {
+        try {
+          res.write('event: shutdown\ndata: {"message":"Server shutting down"}\n\n');
+          res.end();
+        } catch (err) {
+          // Socket may already be destroyed or closed
+        }
+      }
+    }
+    sseClients.clear();
+  },
+
+  /**
    * For testing: clear all SSE connections
    */
   clearAll() {

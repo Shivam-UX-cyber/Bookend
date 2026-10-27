@@ -132,9 +132,12 @@ bookSchema.virtual('price').get(function () {
   return undefined;
 });
 
-// Indexes for common queries
+// Indexes for common queries and marketplace catalog search
 bookSchema.index({ status: 1, createdAt: -1 });
 bookSchema.index({ seller: 1, createdAt: -1 });
+bookSchema.index({ status: 1, category: 1, createdAt: -1 });
 bookSchema.index({ status: 1, category: 1, priceInPaise: 1 });
+bookSchema.index({ status: 1, title: 1 });
+bookSchema.index({ status: 1, author: 1 });
 
 export const Book = mongoose.model('Book', bookSchema);
